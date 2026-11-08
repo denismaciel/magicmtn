@@ -1,0 +1,22 @@
+[package]
+name = "minimal-magicmtn-provider"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../LICENSE"
+publish = false
+
+[workspace]
+
+[dependencies]
+magicmtn-sdk = { version = "=0.1.0", path = "../../rust/magicmtn-sdk" }
+magicmtn-provider-framework = { version = "=0.1.0", path = "../../rust/magicmtn-provider-framework" }
+anyhow = "1"
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[dev-dependencies]
+magicmtn-provider-framework = { path = "../../rust/magicmtn-provider-framework", features = ["host"] }
+flate2 = "1"
+tar = "0.4"
+tempfile = "3"
+sha2 = "0.10"

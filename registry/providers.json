@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "providers": [
+    {
+      "name": "apple-container",
+      "description": "Run local Linux sandboxes on macOS with Apple Container.",
+      "platforms": [
+        "macos-aarch64"
+      ]
+    },
+    {
+      "name": "firecracker",
+      "description": "Run local Linux microVM sandboxes with Firecracker.",
+      "platforms": [
+        "linux-x86_64",
+        "linux-aarch64"
+      ]
+    }
+  ]
+}

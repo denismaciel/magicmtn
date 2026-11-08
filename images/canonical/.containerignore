@@ -1,0 +1,15 @@
+*
+!images
+!images/canonical
+!images/canonical/Containerfile
+!images/canonical/package.json
+!images/canonical/package-lock.json
+!runtime
+!runtime/agent.py
+!runtime/requirements.txt
+!runtime/github.py
+!runtime/gh.py
+!runtime/mcp.js
+!runtime/install.sh
+!runtime/harnesses
+!runtime/harnesses/*.py

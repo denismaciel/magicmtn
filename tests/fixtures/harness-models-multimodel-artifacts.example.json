@@ -1,0 +1,231 @@
+[
+  {
+    "contract_version": 1,
+    "canonicalization_version": "ck-json-v1",
+    "harness_id": "db742c9f-822f-46b9-af7d-96a8889eb834",
+    "harness_revision_id": "30000000-0000-4000-8000-000000000010",
+    "workflow": "catan-playing",
+    "runtime_version": "unconfigured",
+    "system_prompt": "Illustrative Catan draft: use the appropriate configured model for each task.\n",
+    "prompt_provenance": {
+      "kind": "inline",
+      "library_prompt_id": null
+    },
+    "model_manifest": [
+      {
+        "model_id": "26f2c363-a9a7-4a58-b4e5-f70f4f224194",
+        "snapshot": {
+          "source": "ollama",
+          "source_model_id": "tev1:0.8b",
+          "display_name": "Tev1 0.8B",
+          "description": "Illustrative registration; no live readiness claim.",
+          "task_type": "typed_decision",
+          "model_configuration": {
+            "model": "tev1:0.8b",
+            "provider": "ollama",
+            "version": null,
+            "parameters": {
+              "temperature": 0
+            }
+          },
+          "connection_ref": "connection:self-ollama",
+          "capabilities": {
+            "completeness": "partial",
+            "tasks": [
+              "typed_decision"
+            ],
+            "tool_calls": null
+          },
+          "provenance": "registered"
+        }
+      },
+      {
+        "model_id": "bada3034-115c-4598-8292-b26f25e65393",
+        "snapshot": {
+          "source": "ollama",
+          "source_model_id": "qwen3:0.6b",
+          "display_name": "Qwen3 0.6B",
+          "description": "Illustrative registration; no live readiness claim.",
+          "task_type": "chat",
+          "model_configuration": {
+            "model": "qwen3:0.6b",
+            "provider": "ollama",
+            "version": null,
+            "parameters": {
+              "temperature": 0
+            }
+          },
+          "connection_ref": "connection:self-ollama",
+          "capabilities": {
+            "completeness": "complete",
+            "tasks": [
+              "chat"
+            ],
+            "tool_calls": true
+          },
+          "provenance": "registered"
+        }
+      },
+      {
+        "model_id": "f8d6006f-6841-4bca-937e-7cadc26aeaf7",
+        "snapshot": {
+          "source": "ollama",
+          "source_model_id": "qwen3:4b",
+          "display_name": "Qwen3 4B",
+          "description": "Illustrative registration; no live readiness claim.",
+          "task_type": "chat",
+          "model_configuration": {
+            "model": "qwen3:4b",
+            "provider": "ollama",
+            "version": null,
+            "parameters": {
+              "temperature": 0
+            }
+          },
+          "connection_ref": "connection:self-ollama",
+          "capabilities": {
+            "completeness": "complete",
+            "tasks": [
+              "chat"
+            ],
+            "tool_calls": true
+          },
+          "provenance": "registered"
+        }
+      }
+    ],
+    "default_model_id": "f8d6006f-6841-4bca-937e-7cadc26aeaf7",
+    "model_configuration": {
+      "model": "qwen3:4b",
+      "provider": "ollama",
+      "version": null,
+      "parameters": {
+        "temperature": 0
+      }
+    },
+    "tool_manifest": [],
+    "runtime_configuration": {
+      "state": "unconfigured"
+    },
+    "artifact_digest": "e1a5c3e85a8e00ea5ed095e12b3419d2fca8dd439c00624d21602d6a27d203e2"
+  },
+  {
+    "contract_version": 1,
+    "canonicalization_version": "ck-json-v1",
+    "harness_id": "687a9fdc-9c0d-4ed1-8303-fedd02d734a3",
+    "harness_revision_id": "30000000-0000-4000-8000-000000000011",
+    "workflow": "interactive",
+    "runtime_version": "interactive-v1",
+    "system_prompt": "Use tools for concrete tasks. Report observed results accurately.\n",
+    "prompt_provenance": {
+      "kind": "inline",
+      "library_prompt_id": null
+    },
+    "model_manifest": [
+      {
+        "model_id": "26f2c363-a9a7-4a58-b4e5-f70f4f224194",
+        "snapshot": {
+          "source": "ollama",
+          "source_model_id": "tev1:0.8b",
+          "display_name": "Tev1 0.8B",
+          "description": "Illustrative registration; no live readiness claim.",
+          "task_type": "typed_decision",
+          "model_configuration": {
+            "model": "tev1:0.8b",
+            "provider": "ollama",
+            "version": null,
+            "parameters": {
+              "temperature": 0
+            }
+          },
+          "connection_ref": "connection:self-ollama",
+          "capabilities": {
+            "completeness": "partial",
+            "tasks": [
+              "typed_decision"
+            ],
+            "tool_calls": null
+          },
+          "provenance": "registered"
+        }
+      },
+      {
+        "model_id": "f8d6006f-6841-4bca-937e-7cadc26aeaf7",
+        "snapshot": {
+          "source": "ollama",
+          "source_model_id": "qwen3:4b",
+          "display_name": "Qwen3 4B",
+          "description": "Illustrative registration; no live readiness claim.",
+          "task_type": "chat",
+          "model_configuration": {
+            "model": "qwen3:4b",
+            "provider": "ollama",
+            "version": null,
+            "parameters": {
+              "temperature": 0
+            }
+          },
+          "connection_ref": "connection:self-ollama",
+          "capabilities": {
+            "completeness": "complete",
+            "tasks": [
+              "chat"
+            ],
+            "tool_calls": true
+          },
+          "provenance": "registered"
+        }
+      }
+    ],
+    "default_model_id": "f8d6006f-6841-4bca-937e-7cadc26aeaf7",
+    "model_configuration": {
+      "model": "qwen3:4b",
+      "provider": "ollama",
+      "version": null,
+      "parameters": {
+        "temperature": 0
+      }
+    },
+    "tool_manifest": [
+      {
+        "type": "function",
+        "function": {
+          "name": "run_command",
+          "description": "Execute a program with literal arguments.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "program": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "program",
+              "args"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    ],
+    "runtime_configuration": {
+      "state": "configured",
+      "sandbox_image": "alpine:3.24.1",
+      "limits": {
+        "max_model_calls": 6,
+        "max_tool_calls": 4,
+        "max_turn_seconds": 120,
+        "command_timeout_ms": 10000,
+        "max_output_bytes": 4096,
+        "max_context_messages": 40
+      }
+    },
+    "artifact_digest": "2b977368534c9b9157ddb3abc0ff665c083e29ed602f5c10854987fe21ceb439"
+  }
+]

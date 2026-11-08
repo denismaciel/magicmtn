@@ -1,0 +1,36 @@
+name: Formal verification
+
+on:
+  pull_request:
+    paths:
+      - 'formal/**'
+      - 'scripts/check-sandbox-lifecycle.py'
+      - 'core/src/sandbox_lifecycle.rs'
+      - 'core/migrations/010_sandbox_lifecycle.sql'
+      - '.github/workflows/formal.yml'
+  push:
+    paths:
+      - 'formal/**'
+      - 'scripts/check-sandbox-lifecycle.py'
+      - 'core/src/sandbox_lifecycle.rs'
+      - 'core/migrations/010_sandbox_lifecycle.sql'
+      - '.github/workflows/formal.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sandbox-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/check-sandbox-lifecycle.py --mutation-checks

@@ -1,0 +1,16 @@
+{
+  "protocol_version": 1,
+  "provider": "mock",
+  "outcome": {
+    "ok": {
+      "kind": "sandbox",
+      "value": {
+        "provider_id": "mock-123",
+        "status": "running",
+        "create_time_ms": 42,
+        "metadata": null
+      }
+    }
+  },
+  "id": 1
+}

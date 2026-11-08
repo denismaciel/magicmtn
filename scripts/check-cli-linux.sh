@@ -1,0 +1,26 @@
+#!/bin/sh
+# Exercise both libc families before publishing, including Alpine sandboxes.
+set -eu
+cd "$(dirname "$0")/.."
+repository=$(pwd -P)
+architectures='amd64 arm64'
+case "${1:-}" in
+  --native)
+    case "$(uname -m)" in x86_64) architectures=amd64 ;; aarch64|arm64) architectures=arm64 ;; *) exit 1 ;; esac
+    ;;
+  '') ;;
+  *) printf 'Usage: check-cli-linux.sh [--native]\n' >&2; exit 1 ;;
+esac
+for arch in $architectures; do
+  case "$arch" in
+    amd64) binary=magic-linux-x86_64 ;;
+    arm64) binary=magic-linux-arm64 ;;
+  esac
+  for distribution in alpine:3.24 debian:bookworm-slim; do
+    printf 'Checking %s on %s (%s)\n' "$binary" "$distribution" "$arch"
+    podman run --rm --platform "linux/$arch" \
+      -v "$repository/dist/bin:/cli:ro" "docker.io/library/$distribution" \
+      sh -ec '"$1" --version; "$1" --help >/dev/null; "$1" mcp serve --help >/dev/null; "$1" completion bash --print >/tmp/completion; test -s /tmp/completion' \
+      sh "/cli/$binary"
+  done
+done

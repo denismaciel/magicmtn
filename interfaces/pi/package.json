@@ -1,0 +1,38 @@
+{
+  "name": "@magicmtn/pi",
+  "version": "0.1.0",
+  "description": "MagicMtn workspaces and inference for pi",
+  "type": "module",
+  "files": [
+    "index.js",
+    "inference.js",
+    "workspace.js",
+    "picker.js",
+    "README.md"
+  ],
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": ">=1.4.0 <2",
+    "@earendil-works/pi-coding-agent": ">=1.4.0 <2"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-tui": "1.2.0"
+  },
+  "private": true,
+  "license": "UNLICENSED"
+}

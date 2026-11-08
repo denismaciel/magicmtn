@@ -1,0 +1,116 @@
+{
+  "description": "Temporary platform catalog. Model discovery is deferred; defaults do not verify serving readiness.",
+  "default_inference_model": {
+    "display_name": "GLM 5.3 Flash",
+    "model": "glm-5p3-flash"
+  },
+  "inference_providers": {
+    "baseten": {
+      "display_name": "Baseten",
+      "model": "zai-org/GLM-5.3-Flash",
+      "additional_models": [
+        {
+          "display_name": "Qwen3 TTS 12Hz",
+          "model": "qwen3-tts-12hz",
+          "task_type": "text_to_speech",
+          "status": "disabled",
+          "description": "Baseten library model; a dedicated deployment and text-to-speech adapter are required."
+        },
+        {
+          "display_name": "NVIDIA Nemotron 3.5 ASR",
+          "model": "nvidia-nemotron-35-asr",
+          "task_type": "transcription",
+          "status": "disabled",
+          "description": "Baseten library model; a dedicated deployment and transcription adapter are required."
+        },
+        {
+          "display_name": "Qwen Image",
+          "model": "qwen-image",
+          "task_type": "image_generation",
+          "status": "disabled",
+          "description": "Baseten library model; a dedicated deployment and image generation adapter are required."
+        }
+      ]
+    },
+    "fireworks": {
+      "display_name": "Fireworks AI",
+      "model": "accounts/fireworks/models/glm-5p3-flash",
+      "additional_models": [
+        {
+          "display_name": "Kimi K3",
+          "model": "accounts/fireworks/models/kimi-k3"
+        },
+        {
+          "display_name": "Inkling",
+          "model": "accounts/fireworks/models/inkling"
+        },
+        {
+          "display_name": "Gemma 4 31B IT",
+          "model": "accounts/fireworks/models/gemma-4-31b-it",
+          "status": "disabled",
+          "description": "Fireworks on-demand model; a dedicated deployment is required."
+        },
+        {
+          "display_name": "DeepSeek V4.1 Flash",
+          "model": "accounts/fireworks/models/deepseek-v4p1-flash"
+        },
+        {
+          "display_name": "Qwen 3.8 Max",
+          "model": "accounts/fireworks/models/qwen3p8-max"
+        },
+        {
+          "display_name": "Muse Spark Open",
+          "model": "accounts/fireworks/models/muse-spark-open"
+        },
+        {
+          "display_name": "Minimax M3",
+          "model": "accounts/fireworks/models/minimax-m3"
+        },
+        {
+          "display_name": "Gemma 4 31B IT NVFP4",
+          "model": "accounts/fireworks/models/gemma-4-31b-it-nvfp4",
+          "status": "disabled",
+          "description": "Fireworks on-demand model; a dedicated deployment is required."
+        },
+        {
+          "display_name": "Kimi K3.1 Pro",
+          "model": "accounts/fireworks/models/kimi-k3p1-pro"
+        }
+      ]
+    },
+    "ollama": {
+      "display_name": "Ollama",
+      "model": "qwen3:4b",
+      "model_display_name": "qwen3:4b"
+    },
+    "aws": {
+      "display_name": "AWS Bedrock",
+      "model_display_name": "GPT-6.1 Sol",
+      "model": "us.openai.gpt-6.1-sol",
+      "parameters": {},
+      "additional_models": [
+        {
+          "display_name": "GPT-6.1 Terra",
+          "model": "us.openai.gpt-6.1-terra"
+        },
+        {
+          "display_name": "GPT-6 Astra",
+          "model": "us.openai.gpt-6-astra"
+        },
+        {
+          "display_name": "GPT-6 Sol",
+          "model": "us.openai.gpt-6-sol"
+        },
+        {
+          "display_name": "GPT-6 Luna",
+          "model": "us.openai.gpt-6-luna"
+        }
+      ]
+    }
+  },
+  "sandbox_providers": [
+    "apple-container",
+    "exe-dev",
+    "daytona"
+  ]
+}

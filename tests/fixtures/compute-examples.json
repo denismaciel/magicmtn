@@ -1,0 +1,85 @@
+{
+  "registration_create": {
+    "display_name": "Apple Container",
+    "description": "",
+    "backend": "apple-container",
+    "binding_ref": "binding:self-apple",
+    "configuration": {},
+    "capabilities": {
+      "completeness": "partial",
+      "operations": [
+        "create",
+        "exec_bounded",
+        "terminate"
+      ]
+    },
+    "status": "enabled",
+    "idempotency_key": "register-apple-container"
+  },
+  "two_harnesses": [
+    {
+      "name": "Shell",
+      "compute_manifest": [
+        {
+          "compute_id": "10000000-0000-4000-8000-000000000001",
+          "snapshot": {
+            "display_name": "Apple Container",
+            "description": "",
+            "backend": "apple-container",
+            "binding_ref": "binding:self-apple",
+            "configuration": {},
+            "capabilities": {
+              "completeness": "partial",
+              "operations": [
+                "create",
+                "exec_bounded",
+                "terminate"
+              ]
+            }
+          }
+        }
+      ],
+      "default_compute_id": "10000000-0000-4000-8000-000000000001"
+    },
+    {
+      "name": "Review",
+      "compute_manifest": [
+        {
+          "compute_id": "10000000-0000-4000-8000-000000000001",
+          "snapshot": {
+            "display_name": "Apple Container",
+            "description": "",
+            "backend": "apple-container",
+            "binding_ref": "binding:self-apple",
+            "configuration": {},
+            "capabilities": {
+              "completeness": "partial",
+              "operations": [
+                "create",
+                "exec_bounded",
+                "terminate"
+              ]
+            }
+          }
+        }
+      ],
+      "default_compute_id": "10000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "future_backend_membership": {
+    "status": "illustrative only; exe.dev adapter is not implemented",
+    "inventory_names": [
+      "Apple Container",
+      "exe.dev"
+    ],
+    "harness_enabled_backends": [
+      "Apple Container",
+      "exe.dev"
+    ]
+  },
+  "runtime_configuration_ownership": {
+    "state": "configured",
+    "sandbox_image": "alpine:3.24.1",
+    "note": "Image belongs to the harness runtime, not Compute"
+  }
+}

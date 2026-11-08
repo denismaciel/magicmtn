@@ -1,0 +1,292 @@
+import { spawn, spawnSync } from "node:child_process";
+import { providerLabel } from "./workspace.js";
+import { BACK, pickDefault } from "./picker.js";
+import { createInferenceProvider } from "./inference.js";
+
+// Replaced with the installing CLI's absolute path by magic pi install.
+const magicExecutable = null;
+function executable() {
+  if (!magicExecutable) throw new Error("Run magic pi install to bind this extension to your CLI.");
+  return magicExecutable;
+}
+
+// The CLI alone owns account credentials and provider setup. Pi sees only a
+// short-lived inference grant when explicitly requested by the user.
+export function magic(args, signal, input) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable(), args, { stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], signal });
+    if (input !== undefined) {
+      child.stdin.on("error", () => {});
+      child.stdin.end(JSON.stringify(input));
+    }
+    let output = "";
+    let errors = "";
+    child.stdout.setEncoding("utf8").on("data", (data) => {
+      output += data;
+      if (output.length > 4 * 1024 * 1024) child.kill();
+    });
+    child.stderr.setEncoding("utf8").on("data", (data) => {
+      errors = (errors + data).slice(-16000);
+    });
+    child.on("error", (error) => reject(new Error(error.code === "ENOENT" ? "Reinstall the magic CLI and run magic pi install to refresh its saved path." : error.message)));
+    child.on("close", (code) => {
+      if (code !== 0) {
+        const error = new Error(errors.trim() || "MagicMtn command failed");
+        error.reported = true; // The CLI reports its own Pi command failures.
+        return reject(error);
+      }
+      try { resolve(JSON.parse(output)); } catch { reject(new Error("Invalid response from magic CLI")); }
+    });
+  });
+}
+
+export function workspaceModels(ctx, catalog) {
+  const models = [...catalog.models];
+  if (ctx.model && ctx.model.provider !== "magicmtn") {
+    models.unshift({ id: "__pi_current__", display_name: `Pi: ${ctx.model.name || ctx.model.id}`, provider: ctx.model.provider });
+  }
+  return models;
+}
+
+export async function connectPiModel(ctx, connect = (value) => magic(["pi", "connect"], undefined, value)) {
+  const model = ctx.model;
+  if (!model || !["openai-completions", "openai-responses", "anthropic-messages"].includes(model.api)) {
+    throw new Error("This Pi model API is not supported by detached inference yet. Select a supported HTTP API or a MagicMtn model.");
+  }
+  if (ctx.modelRegistry.isUsingOAuth(model)) {
+    throw new Error("Detached OAuth inference needs a gateway account connection. Use an API-key provider for now; your local OAuth credentials will not be copied.");
+  }
+  if (!(await ctx.ui.confirm("Connect Pi inference", `Allow MagicMtn's trusted gateway to store your ${model.provider} API key for remote sessions? Real keys stay outside the sandbox. This does not copy your other Pi credentials.`))) {
+    throw new Error("Pi inference connection cancelled");
+  }
+  const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+  if (!auth.ok || !auth.apiKey || (auth.headers && Object.keys(auth.headers).length) || (auth.env && Object.keys(auth.env).length)) {
+    throw new Error("This Pi authentication configuration requires a dedicated gateway adapter. No credentials were uploaded.");
+  }
+  return connect({ model: { ...model, baseUrl: auth.baseUrl || model.baseUrl }, api_key: auth.apiKey });
+}
+
+function screenState(states, key) {
+  if (!states.has(key)) states.set(key, {});
+  return states.get(key);
+}
+
+async function select(ctx, title, items, label, includeId = true, states = new Map()) {
+  if (!items.length) throw new Error(`No ${title.toLowerCase()} available. Configure a provider connection in MagicMtn.`);
+  const chosen = await pickDefault(ctx, { title, state: screenState(states, title),
+    items: items.map((item) => ({ ...item, label: includeId ? `${label(item)} [${item.id}]` : label(item), detail: label(item) })),
+  });
+  return chosen === BACK || chosen === undefined ? chosen : items.find((item) => item.id === chosen.id);
+}
+
+async function selectModel(ctx, catalog, states) {
+  if (!catalog.models.length && catalog.unavailable_models?.length) {
+    throw new Error(catalog.unavailable_models.map((m) => `${m.display_name}: ${m.reason}`).join("\n"));
+  }
+  return select(ctx, "Models", catalog.models, (m) => `${m.display_name} (${m.provider})`, true, states);
+}
+
+async function terminal(ctx, args) {
+  let result;
+  const connected = await ctx.ui.custom((tui, _theme, _keys, done) => {
+    tui.stop();
+    try {
+      // The child owns the real terminal. No RPC UI emulation or duplicate agent
+      // loop; after disconnect, pi restores its original local interface.
+      result = spawnSync(executable(), args, { stdio: "inherit" });
+    } finally {
+      tui.start();
+      tui.requestRender(true);
+    }
+    done(result?.status === 0);
+    return { render: () => [], invalidate() {} };
+  });
+  if (result?.error || result?.signal) {
+    const detail = result.error?.code === "ENOENT" ? "Reinstall the magic CLI and run magic pi install to refresh its saved path."
+      : result.error?.message || `magic was interrupted by ${result.signal}`;
+    const error = new Error(detail);
+    error.attachFailure = args[0] === "pi" && args[1] === "attach";
+    throw error;
+  }
+  return connected;
+}
+
+export default function magicmtn(pi) {
+  const inference = createInferenceProvider(magic);
+  const refreshModels = async (ctx, catalog) => {
+    inference.load(catalog.models);
+    pi.registerProvider(inference.provider);
+    // Pi's available-model/auth snapshots refresh asynchronously. Await them
+    // before setModel(), and before offering these models in its native picker.
+    await ctx.modelRegistry.refresh({ allowNetwork: false, providers: ["magicmtn"] });
+  };
+  const updateStatus = (model, ctx) => {
+    const managed = model?.provider === "magicmtn" && inference.model(model.id);
+    ctx.ui.setStatus("magicmtn", managed
+      ? `MagicMtn · local tools · ${managed.display_name} (${providerLabel(managed.provider)})`
+      : undefined);
+  };
+  pi.on("session_start", async (_event, ctx) => {
+    try {
+      const account = await magic(["pi", "account"]);
+      if (account.signed_in) {
+        await refreshModels(ctx, await magic(["pi", "catalog"]));
+        updateStatus(ctx.model, ctx);
+      } else {
+        inference.clear();
+        pi.unregisterProvider("magicmtn");
+      }
+    } catch {
+      inference.clear();
+      pi.unregisterProvider("magicmtn");
+      if (ctx.model?.provider === "magicmtn") ctx.ui.notify("Could not load MagicMtn models. Check magic login, then use /magic inference.", "warning");
+    }
+  });
+  pi.on("model_select", (event, ctx) => updateStatus(event.model || ctx.model, ctx));
+  pi.registerCommand("magic", {
+    description: "Open a MagicMtn pi workspace, or configure MagicMtn inference",
+    handler: async (args, ctx) => {
+      if (ctx.mode !== "tui") throw new Error("/magic requires pi's interactive terminal mode");
+      await ctx.waitForIdle();
+      const states = new Map();
+      let action = args.trim();
+      navigation: while (true) {
+        try {
+          let catalog;
+          if (!action) {
+            const account = await magic(["pi", "account"]);
+            if (account.signed_in) catalog = await magic(["pi", "catalog"]);
+            const defaultModel = catalog && (catalog.defaults.inference_source === "pi" && ctx.model
+              ? { display_name: `Pi: ${ctx.model.name || ctx.model.id}` }
+              : catalog.models.find((m) => m.id === catalog.defaults.model_id));
+            const defaultLabel = defaultModel
+              ? `Default (${defaultModel.display_name})`
+              : "Default (configure model)";
+            const actions = account.signed_in
+                ? [defaultLabel, "View sandboxes", "New workspace", "Inference only", "Sign out"]
+                : ["Sign in"];
+            const selected = await select(ctx, account.signed_in ? `MagicMtn · ${account.user.display_name}` : "MagicMtn · Not signed in",
+              actions.map((label) => ({ id: label })), (item) => item.id, false, states);
+            if (selected === BACK || !selected) return;
+            action = selected.id;
+            if (action === defaultLabel) action = "default";
+          }
+          if (!action) return;
+          if (action === "default") {
+            catalog ??= await magic(["pi", "catalog"]);
+            while (true) {
+              const model = await pickDefault(ctx, {
+                kind: "Model", defaultId: catalog.defaults.inference_source === "pi" && ctx.model ? "__pi_current__" : catalog.defaults.model_id, state: screenState(states, "default-model"),
+                items: workspaceModels(ctx, catalog).map((m) => ({ ...m, label: `${m.display_name} [${m.provider}]`, detail: m.display_name })),
+              });
+              if (model === BACK) { action = ""; continue navigation; }
+              if (!model) return;
+              await magic(["pi", "defaults", ...(model.id === "__pi_current__" ? ["--use-pi"] : ["--model", model.id])]);
+              ctx.ui.notify(`Workspace defaults saved: ${model.display_name}. Use /magic new to start a workspace, or /magic view to reconnect.`, "info");
+              return;
+            }
+          }
+          if (["logout", "Sign out"].includes(action)) {
+            if (!(await terminal(ctx, ["logout"]))) throw new Error("MagicMtn sign-out did not complete");
+            inference.clear();
+            pi.unregisterProvider("magicmtn");
+            ctx.ui.setStatus("magicmtn", undefined);
+            ctx.ui.setStatus("magicmtn-workspace", undefined);
+            ctx.ui.notify("Signed out of MagicMtn", "info");
+            return;
+          }
+          if (["login", "Sign in"].includes(action)) {
+            if (!(await terminal(ctx, ["login", "--client", "pi"]))) throw new Error("MagicMtn sign-in did not complete");
+            await refreshModels(ctx, await magic(["pi", "catalog"]));
+            ctx.ui.notify("Signed in to MagicMtn", "info");
+            return;
+          }
+          if (["inference", "Inference only"].includes(action)) {
+            const catalog = await magic(["pi", "catalog"]);
+            const model = await selectModel(ctx, catalog, states);
+            if (model === BACK) { action = ""; continue navigation; }
+            if (!model) return;
+            await refreshModels(ctx, catalog);
+            await inference.authorize(model.id);
+            await ctx.modelRegistry.refresh({ allowNetwork: false, providers: ["magicmtn"] });
+            const registered = ctx.modelRegistry.find("magicmtn", inference.idFor(model.id));
+            if (!registered || !(await pi.setModel(registered))) throw new Error("Could not select the MagicMtn model");
+            ctx.ui.setStatus("magicmtn", `MagicMtn · local tools · ${model.display_name} (${providerLabel(model.provider)})`);
+            ctx.ui.notify("MagicMtn inference enabled with local tools. Model access renews automatically. Pricing is not yet reported in Pi.", "info");
+            return;
+          }
+          let workspace;
+          if (["open", "view", "View sandboxes"].includes(action)) {
+            sandboxes: while (true) {
+              const { workspaces } = await magic(["pi", "list"]);
+              const running = workspaces.filter((w) => ["running", "starting"].includes(w.status));
+              if (!running.length) {
+                ctx.ui.notify("No live workspaces. Use /magic new to create one.", "info");
+                return;
+              }
+              workspace = await select(ctx, "Sandboxes", running, (w) => `${w.image?.display_name || "MagicMtn Canonical"} · ${w.created_at}`, true, states);
+              if (workspace === BACK) { action = ""; continue navigation; }
+              if (!workspace) return;
+              while (true) {
+                const selected = await select(ctx, `MagicMtn sandbox ${workspace.id.slice(0, 8)}`,
+                  [{ id: "enter", label: "Enter/ssh" }, { id: "terminate", label: "Terminate" }, { id: "status", label: "Session status" }, { id: "stop", label: "Stop agent" }, { id: "restart", label: "Restart agent" }], (item) => item.label, false, states);
+                if (selected === BACK) continue sandboxes;
+                if (!selected) return;
+                if (selected.id === "enter") break sandboxes;
+                if (["status", "stop", "restart"].includes(selected.id)) {
+                  if (selected.id !== "status" && !(await ctx.ui.confirm("MagicMtn agent", `${selected.id === "stop" ? "Stop" : "Restart"} the agent in this sandbox? This may interrupt active work.`))) continue;
+                  const result = await magic(["pi", selected.id, workspace.id]);
+                  ctx.ui.notify(selected.id === "status" ? JSON.stringify(result) : "Command recorded; the sandbox supervisor will acknowledge it on reconnect.", "info");
+                  continue;
+                }
+                const confirmation = await select(ctx, `Delete sandbox ${workspace.id} and its workspace files?`,
+                  [{ id: "cancel", label: "Cancel" }, { id: "terminate", label: "Terminate" }], (item) => item.label, false);
+                if (confirmation === BACK || confirmation?.id === "cancel") continue;
+                if (!confirmation) return;
+                const result = await magic(["pi", "terminate", workspace.id]);
+                ctx.ui.notify(`Sandbox ${workspace.id}: ${result.status}`, "info");
+                workspace = undefined;
+                continue sandboxes;
+              }
+            }
+          } else if (!["new", "New workspace"].includes(action)) {
+            ctx.ui.notify("Usage: /magic [default|view|new|inference|login|logout]", "info");
+            return;
+          }
+          if (!workspace) {
+            catalog ??= await magic(["pi", "catalog"]);
+            if (!catalog.default_image) throw new Error("MagicMtn Canonical must be published and enabled before creating a workspace.");
+            const usePi = catalog.defaults.inference_source === "pi" && ctx.model && ctx.model.provider !== "magicmtn";
+            const model = catalog.models.find((m) => m.id === catalog.defaults.model_id);
+            if (!usePi && !model) throw new Error("No default inference model available. Run /magic default to configure one.");
+            const inference = usePi
+              ? ["--pi-connection", (await connectPiModel(ctx)).id]
+              : ["--model", model.id];
+            ctx.ui.notify(`Starting workspace with ${catalog.default_image.display_name}…`, "info");
+            workspace = await magic(["pi", "create", ...inference]);
+          }
+          ctx.ui.notify(`Connecting workspace ${workspace.id}. Ctrl+] returns here; the sandbox stays running.`, "info");
+          const connected = await terminal(ctx, ["pi", "attach", workspace.id]);
+          ctx.ui.setStatus("magicmtn-workspace", `Local pi · disconnected from MagicMtn sandbox ${workspace.id.slice(0, 8)}`);
+          if (!connected) {
+            const error = new Error(`Workspace connection ended with an error. Resume workspace ${workspace.id} through /magic.`);
+            error.reported = true;
+            throw error;
+          }
+          return;
+        } catch (error) {
+          const operation = error.attachFailure ? "attach"
+            : ["new", "New workspace"].includes(action) ? "create"
+            : ["open", "view", "View sandboxes"].includes(action) ? "resume"
+            : action === "restart" ? "restart" : undefined;
+          const expected = /cancelled|must be published and enabled|No default inference model/i.test(error.message);
+          if (operation && !error.reported && !expected) {
+            await magic(["pi", "report-error", "--operation", operation]).catch(() => {});
+          }
+          ctx.ui.notify(error.message, "error");
+          return;
+        }
+      }
+    },
+  });
+}

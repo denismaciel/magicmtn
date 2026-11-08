@@ -1,0 +1,40 @@
+[package]
+name = "magicmtn-engine"
+version = "0.1.0"
+edition = "2021"
+license-file = "../LICENSE"
+publish = false
+description = "Revisioned harness configuration, inventory, and interactive session services"
+
+[dependencies]
+magicmtn-provider-framework = { path = "../sdk/rust/magicmtn-provider-framework", features = ["host"] }
+magicmtn-contracts = { path = "../sdk/rust/magicmtn-contracts" }
+magicmtn-sdk = { path = "../sdk/rust/magicmtn-sdk" }
+anyhow = "1.0.86"
+aws-config = { version = "1.12.0", optional = true, default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-kms = { version = "1.123.0", optional = true }
+ring = "0.17"
+axum = "0.7.5"
+chrono = { version = "0.4.38", features = ["serde"] }
+hex = "0.4.3"
+serde = { version = "1.0.200", features = ["derive"] }
+serde_json = "1.0.120"
+sha2 = "0.10.9"
+sqlx = { version = "0.8.0", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "migrate"] }
+tokio = { version = "1.40.0", features = ["full"] }
+tracing = "0.1"
+thiserror = "2"
+uuid = { version = "1.10.0", features = ["v4", "serde"] }
+zeroize = "1.8"
+
+
+
+[features]
+default = []
+credential-vault-aws = ["dep:aws-config", "dep:aws-sdk-kms"]
+acceptance-failpoints = []
+
+[dev-dependencies]
+base64 = "0.22"
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3"

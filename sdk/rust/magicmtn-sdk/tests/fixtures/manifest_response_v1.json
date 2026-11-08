@@ -1,0 +1,26 @@
+{
+  "protocol_version": 1,
+  "provider": "mock",
+  "outcome": {
+    "ok": {
+      "kind": "description",
+      "value": {
+        "manifest_version": 1,
+        "provider_version": "0.1.0",
+        "capabilities": {
+          "inference_tasks": [],
+          "sandbox_operations": [
+            "create",
+            "terminate",
+            "exec"
+          ],
+          "editable_surfaces": [],
+          "observe": false,
+          "evaluate": false,
+          "deploy": false
+        }
+      }
+    }
+  },
+  "id": 1
+}

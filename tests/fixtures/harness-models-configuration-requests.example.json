@@ -1,0 +1,65 @@
+{
+  "inventory_create": {
+    "source": "ollama",
+    "source_model_id": "tev1:0.8b",
+    "display_name": "Tev1 0.8B",
+    "description": "Illustrative registration; no live readiness claim.",
+    "task_type": "typed_decision",
+    "model_configuration": {
+      "model": "tev1:0.8b",
+      "provider": "ollama",
+      "version": null,
+      "parameters": {
+        "temperature": 0
+      }
+    },
+    "connection_ref": "connection:self-ollama",
+    "capabilities": {
+      "completeness": "partial",
+      "tasks": [
+        "typed_decision"
+      ],
+      "tool_calls": null
+    },
+    "supported_catalog_id": null,
+    "status": "enabled",
+    "idempotency_key": "example-register-tev1"
+  },
+  "harness_create": {
+    "name": "Catan",
+    "description": "Illustrative creation request, not live prompt export.",
+    "workflow": "catan-playing",
+    "model_ids": [
+      "26f2c363-a9a7-4a58-b4e5-f70f4f224194",
+      "bada3034-115c-4598-8292-b26f25e65393",
+      "f8d6006f-6841-4bca-937e-7cadc26aeaf7"
+    ],
+    "default_model_id": "f8d6006f-6841-4bca-937e-7cadc26aeaf7",
+    "system_prompt": "Illustrative Catan draft: use the appropriate configured model for each task.\n",
+    "library_prompt_id": null,
+    "runtime_version": "unconfigured",
+    "tool_manifest": [],
+    "runtime_configuration": {
+      "state": "unconfigured"
+    },
+    "activation": "draft",
+    "expected_active_revision_id": null,
+    "idempotency_key": "example-create-catan"
+  },
+  "configuration_save": {
+    "expected_base_revision_id": "1c26c60f-ff16-4750-8984-f0bc91fd53f4",
+    "expected_active_revision_id": "1c26c60f-ff16-4750-8984-f0bc91fd53f4",
+    "changes": {
+      "model_selection": {
+        "model_ids": [
+          "26f2c363-a9a7-4a58-b4e5-f70f4f224194",
+          "f8d6006f-6841-4bca-937e-7cadc26aeaf7"
+        ],
+        "default_model_id": "f8d6006f-6841-4bca-937e-7cadc26aeaf7",
+        "refresh_snapshots": false
+      }
+    },
+    "activation": "draft",
+    "idempotency_key": "example-save-practical-shell-models"
+  }
+}

@@ -1,0 +1,40 @@
+[package]
+name = "magicmtn-provider-framework"
+version = "0.1.0"
+edition = "2021"
+license-file = "LICENSE"
+publish = false
+description = "Persistent RPC runner and optional installation host for MagicMtn providers"
+
+[dependencies]
+anyhow = "1.0.86"
+magicmtn-sdk = { version = "0.1.0", path = "../magicmtn-sdk" }
+serde_json = "1.0.120"
+
+[features]
+default = []
+host = ["dep:tokio", "dep:sha2", "dep:semver", "dep:tempfile", "dep:tar", "dep:flate2", "dep:serde"]
+
+[dependencies.tokio]
+version = "1"
+optional = true
+features = ["process", "io-util", "time", "sync", "rt"]
+[dependencies.sha2]
+version = "0.10"
+optional = true
+[dependencies.semver]
+version = "1"
+optional = true
+[dependencies.tempfile]
+version = "3"
+optional = true
+[dependencies.tar]
+version = "0.4"
+optional = true
+[dependencies.flate2]
+version = "1"
+optional = true
+[dependencies.serde]
+version = "1"
+optional = true
+features = ["derive"]

@@ -1,0 +1,30 @@
+# Static musl binaries run in both Alpine sandboxes and glibc distributions.
+# Cross-compile on Apple Silicon without emulating the Rust compiler.
+FROM docker.io/library/rust:1.99.0-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6 AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/cross \
+    && /opt/cross/bin/pip install --no-cache-dir cargo-zigbuild==0.23.4 ziglang==0.14.1
+ENV PATH=/opt/cross/bin:$PATH
+RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY release ./release
+COPY cli ./cli
+COPY core ./core
+COPY assets ./assets
+COPY registry ./registry
+COPY scripts/install-public.sh ./scripts/install-public.sh
+COPY tests ./tests
+COPY interfaces/pi ./interfaces/pi
+COPY sdk/rust ./sdk/rust
+RUN cargo zigbuild --release --locked --no-default-features -p magicmtn-cli --bin magic \
+    --target x86_64-unknown-linux-musl --target aarch64-unknown-linux-musl \
+    && mkdir /out \
+    && cp target/x86_64-unknown-linux-musl/release/magic /out/magic-linux-x86_64 \
+    && cp target/aarch64-unknown-linux-musl/release/magic /out/magic-linux-arm64 \
+    && ! readelf -l /out/magic-linux-x86_64 /out/magic-linux-arm64 | grep 'INTERP' \
+    && ! readelf -d /out/magic-linux-x86_64 /out/magic-linux-arm64 | grep 'NEEDED'
+
+FROM scratch
+COPY --from=builder /out/ /

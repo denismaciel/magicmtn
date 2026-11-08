@@ -1,0 +1,136 @@
+name: Publish signed CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel (every channel requires signing and notarization)
+        type: choice
+        options: [alpha, beta, prerelease, stable]
+        default: beta
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-release
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/cli-release-checks.yml
+
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: python3 scripts/cli_release.py check-trust
+      - run: python3 scripts/cli_release.py check-bootstrap
+
+  linux:
+    needs: [checks, preflight]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: sudo apt-get update && sudo apt-get install -y podman
+      - run: sh scripts/package-cli-linux.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cli-linux
+          path: dist/bin/magic-linux-*
+          if-no-files-found: error
+          retention-days: 14
+
+  linux-compatibility:
+    needs: linux
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: cli-linux
+          path: dist/bin
+      - run: sudo apt-get update && sudo apt-get install -y podman
+      - run: chmod +x dist/bin/magic-linux-* && sh scripts/check-cli-linux.sh --native
+
+  publish:
+    needs: [checks, preflight, linux-compatibility]
+    runs-on: macos-15
+    timeout-minutes: 45
+    environment: cli-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: cli-linux
+          path: dist/bin
+      - run: rustup toolchain install 1.99.0 --profile minimal && rustup default 1.99.0
+      - name: Require release credentials
+        env:
+          SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY_PEM }}
+          CERTIFICATE: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ vars.APPLE_NOTARY_ISSUER }}
+          SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          AWS_ROLE: ${{ vars.CLI_RELEASE_AWS_ROLE_ARN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          names = ('SIGNING_KEY', 'CERTIFICATE', 'CERTIFICATE_PASSWORD', 'NOTARY_KEY', 'NOTARY_KEY_ID', 'NOTARY_ISSUER', 'SIGNING_IDENTITY', 'AWS_ROLE')
+          missing = [name for name in names if not os.environ.get(name)]
+          if missing:
+              raise SystemExit('Missing release settings: ' + ', '.join(missing))
+          root = Path(os.environ['RUNNER_TEMP'])
+          for name, filename, output in [('SIGNING_KEY', 'cli-signing.pem', 'MAGICMTN_RELEASE_SIGNING_KEY_FILE'), ('NOTARY_KEY', 'notary.p8', 'MAGICMTN_NOTARY_KEY_FILE')]:
+              path = root / filename
+              descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+              with os.fdopen(descriptor, 'w') as file:
+                  file.write(os.environ[name])
+              with open(os.environ['GITHUB_ENV'], 'a') as file:
+                  file.write(output + '=' + str(path) + '\n')
+          PY
+      - uses: Apple-Actions/import-codesign-certs@63fff01cd422d4b7b855d40ca1e9d34d2de9427d # v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+      - uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
+        with:
+          role-to-assume: ${{ vars.CLI_RELEASE_AWS_ROLE_ARN }}
+          aws-region: us-east-2
+      - run: sh scripts/package-cli.sh
+      - name: Sign, notarize, verify, and publish
+        env:
+          MAGICMTN_APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          MAGICMTN_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+          MAGICMTN_NOTARY_ISSUER: ${{ vars.APPLE_NOTARY_ISSUER }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: python3 scripts/publish-cli.py --skip-build --channel "$RELEASE_CHANNEL"
+      - name: Remove temporary private keys
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cli-signing.pem" "$RUNNER_TEMP/notary.p8"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: cli-release-receipt
+          path: |
+            dist/public-release/*.json
+            dist/bin/notarization.json
+            dist/bin/magic-darwin-arm64
+            dist/bin/magic-darwin-arm64.zip
+          if-no-files-found: ignore
+          retention-days: 14

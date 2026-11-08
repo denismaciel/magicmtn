@@ -1,0 +1,12 @@
+{
+  "name": "magicmtn-canonical-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pinned Pi installation for the canonical MagicMtn sandbox image",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.0"
+  },
+  "overrides": {
+    "protobufjs": "7.6.6"
+  }
+}

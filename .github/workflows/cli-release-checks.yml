@@ -1,0 +1,57 @@
+name: CLI release verification
+
+on:
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Containerfile'
+      - 'images/cli.Containerfile'
+      - 'cli/**'
+      - 'release/**'
+      - 'scripts/*cli*'
+      - 'scripts/install-public.sh'
+      - 'scripts/test-install-public.sh'
+      - 'tests/fixtures/cli-release/**'
+      - 'server/src/cli_installer.rs'
+      - 'server/src/authentication.rs'
+      - 'server/tests/cli_installer.rs'
+      - '.github/workflows/cli-release*.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Containerfile'
+      - 'images/cli.Containerfile'
+      - 'cli/**'
+      - 'release/**'
+      - 'scripts/*cli*'
+      - 'scripts/install-public.sh'
+      - 'scripts/test-install-public.sh'
+      - 'tests/fixtures/cli-release/**'
+      - 'server/src/cli_installer.rs'
+      - 'server/src/authentication.rs'
+      - 'server/tests/cli_installer.rs'
+      - '.github/workflows/cli-release*.yml'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: rustup toolchain install 1.99.0 --profile minimal && rustup default 1.99.0
+      - run: python3 -m unittest discover -s scripts -p test_cli_release.py
+      - run: cargo test --locked -p magicmtn-cli --bin magic
+      - run: cargo test --locked -p magicmtn-server --lib cli_installer::tests
+      - run: cargo test --locked -p magicmtn-server --test cli_installer

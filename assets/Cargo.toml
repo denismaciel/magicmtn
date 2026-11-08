@@ -1,0 +1,9 @@
+[package]
+name = "magicmtn-assets"
+version = "0.1.0"
+edition = "2021"
+license-file = "../LICENSE"
+publish = false
+
+[features]
+test-fixtures = []
