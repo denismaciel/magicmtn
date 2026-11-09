@@ -64,47 +64,56 @@ fn production_backend_is_fixed() {
 #[derive(Subcommand)]
 enum Commands {
     /// Expose MagicMtn sandbox tools to MCP clients
+    #[command(display_order = 5)]
     Mcp {
         #[command(subcommand)]
         command: mcp::Commands,
     },
     /// Update magic to the latest public release
+    #[command(display_order = 6)]
     Update,
     /// Sign in through the MagicMtn web app
+    #[command(display_order = 0)]
     Login {
         /// Application initiating the browser sign-in
         #[arg(long, value_parser = ["cli", "pi"], default_value = "cli")]
         client: String,
     },
     /// Revoke the saved CLI session and sign out
+    #[command(display_order = 1001)]
     Logout,
     /// Show your account and current plan
+    #[command(display_order = 7)]
     Whoami {
         #[command(subcommand)]
         command: Option<WhoamiCommands>,
     },
     /// Manage Pi workspaces and inference
+    #[command(display_order = 1)]
     Pi {
         #[command(subcommand)]
         command: pi::Commands,
     },
     /// Install agents in your MagicMtn workspace
+    #[command(display_order = 4)]
     Agents {
         #[command(subcommand)]
         command: agents::Commands,
     },
     /// Install and manage local providers
+    #[command(display_order = 3)]
     Provider {
         #[command(subcommand)]
         command: ProviderCommands,
     },
     /// Manage standalone and session sandboxes
-    #[command(arg_required_else_help = true)]
+    #[command(arg_required_else_help = true, display_order = 2)]
     Sandbox {
         #[command(subcommand)]
         command: SandboxCommands,
     },
     /// Generate and install shell completions (detect the shell if omitted)
+    #[command(display_order = 1000)]
     Completion {
         #[arg(value_enum)]
         shell: Option<CompletionShell>,
@@ -119,7 +128,7 @@ enum Commands {
         yes: bool,
     },
     /// Uninstall this CLI and its shell/Pi integration after confirmation
-    #[command(display_order = 1000)]
+    #[command(display_order = 1002)]
     Uninstall,
 }
 
