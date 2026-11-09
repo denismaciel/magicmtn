@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Validate a complete curated release, then optionally publish it to the Registry.
 
-Without --publish this only prepares dist/registry/release. No CLI or user can
-write to the Registry: this script requires MagicMtn's AWS maintainer credentials.
+Without --publish this only prepares dist/registry/release. Publishing requires
+MagicMtn's AWS credentials and a backend Registry owner connection. A release is
+complete only after its metadata and user documentation are recorded in Postgres.
 """
 import argparse
 import hashlib
@@ -83,7 +84,35 @@ def aws(*args):
     return subprocess.check_output(['aws', *args, '--profile', 'magicmtn', '--region', 'us-east-2', '--output', 'json'], text=True)
 
 
-def publish(index, uploads):
+def publication(index, documentation):
+    """Join release metadata with publisher-supplied user documentation."""
+    source = json.loads(documentation.read_text())['providers']
+    docs = {entry['name']: entry for entry in source}
+    if len(docs) != len(source):
+        raise ValueError('duplicate provider documentation')
+    providers = []
+    for release in json.loads(index.read_text())['providers']:
+        entry = docs.get(release['name'])
+        if not entry or any(not isinstance(entry.get(key), str) or not entry[key].strip()
+                            for key in ('requirements', 'documentation', 'repo_url')):
+            raise ValueError(f"{release['name']}: requirements, user documentation and repo_url are required")
+        providers.append({**release, 'requirements': entry['requirements'], 'documentation': entry['documentation'], 'repo_url': entry['repo_url']})
+    return {'schema_version': 1, 'providers': providers}
+
+
+def record_publication(metadata, publisher, check=False):
+    with tempfile.TemporaryDirectory() as temporary:
+        path = Path(temporary) / 'publication.json'
+        path.write_text(json.dumps(metadata))
+        command = [publisher, '--file', str(path)]
+        if check:
+            command.append('--check')
+        # REGISTRY_DATABASE_URL stays in the environment, never in arguments.
+        subprocess.run(command, check=True)
+
+
+def publish(index, uploads, metadata, publisher='magicmtn-publish-provider'):
+    record_publication(metadata, publisher, check=True)
     # Conditional publication serializes maintainers and protects immutable versions.
     condition = ['--if-none-match', '*']
     with tempfile.TemporaryDirectory() as temporary:
@@ -108,6 +137,10 @@ def publish(index, uploads):
             '--content-type', 'application/gzip', '--cache-control', 'no-cache')
     aws('s3api', 'put-object', '--bucket', BUCKET, '--key', 'index.json', '--body', str(index),
         '--content-type', 'application/json', '--cache-control', 'no-cache', *condition)
+    # A failed database write fails publication and leaves artifacts for a retry.
+    # Record only after the conditional S3 commit succeeds. Cleanup follows both
+    # commits. Maintainer publications must run serially across these two stores.
+    record_publication(metadata, publisher)
     listing = json.loads(aws('s3api', 'list-objects-v2', '--bucket', BUCKET, '--prefix', 'providers/'))
     obsolete = [obj['Key'] for obj in listing.get('Contents', []) if obj['Key'] not in uploads]
     for offset in range(0, len(obsolete), 1000):
@@ -120,13 +153,24 @@ def publish(index, uploads):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('packages', nargs='+', type=Path)
+    parser.add_argument('packages', nargs='*', type=Path)
     parser.add_argument('--publish', action='store_true')
+    parser.add_argument('--documentation', type=Path, required=True)
+    parser.add_argument('--registry-publisher', default='magicmtn-publish-provider')
+    parser.add_argument('--import-index', type=Path, help='Record an existing Registry index in the backend without uploading or deleting artifacts')
     args = parser.parse_args()
+    if args.import_index:
+        if args.packages or args.publish:
+            parser.error('--import-index cannot be combined with packages or --publish')
+        record_publication(publication(args.import_index, args.documentation), args.registry_publisher)
+        return
+    if not args.packages:
+        parser.error('packages are required')
     index, uploads = prepare(args.packages, ROOT / 'dist/registry/release')
+    metadata = publication(index, args.documentation)
     print(index)
     if args.publish:
-        publish(index, uploads)
+        publish(index, uploads, metadata, args.registry_publisher)
 
 
 if __name__ == '__main__':

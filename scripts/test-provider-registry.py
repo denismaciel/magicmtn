@@ -57,10 +57,35 @@ class RegistryReleaseTests(unittest.TestCase):
                 if args[1]=='list-objects-v2': return json.dumps({'Contents':[{'Key':'providers/old/1/linux.tar.gz'}]})
                 if args[1]=='delete-objects': return '{"Errors":[{"Code":"AccessDenied"}]}'
                 return '{}'
-            with patch.object(publisher.subprocess, 'run', side_effect=missing), patch.object(publisher, 'aws', side_effect=aws):
+            with patch.object(publisher.subprocess, 'run', side_effect=missing), patch.object(publisher, 'aws', side_effect=aws), patch.object(publisher, 'record_publication') as record:
                 with self.assertRaisesRegex(RuntimeError, 'could not be removed'):
-                    publisher.publish(index, {})
+                    publisher.publish(index, {}, {'providers': []})
+            self.assertEqual(record.call_count, 2)
             self.assertEqual([args[1] for args in calls], ['put-object','list-objects-v2','delete-objects'])
+
+    def test_publication_requires_documentation_for_each_release(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            index = root / 'index.json'
+            index.write_text(json.dumps({'providers': [{'name': 'new-provider', 'version': '1.0.0'}]}))
+            docs = root / 'docs.json'
+            docs.write_text('{"providers": []}')
+            with self.assertRaisesRegex(ValueError, 'repo_url are required'):
+                publisher.publication(index, docs)
+            docs.write_text(json.dumps({'providers': [{'name': 'new-provider', 'requirements': 'Linux', 'documentation': 'Use it', 'repo_url': 'https://github.com/example/new-provider'}]}))
+            self.assertEqual(publisher.publication(index, docs)['providers'][0]['documentation'], 'Use it')
+            self.assertEqual(publisher.publication(index, docs)['providers'][0]['repo_url'], 'https://github.com/example/new-provider')
+
+    def test_database_failure_fails_publication_before_cleanup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            index = Path(temporary) / 'index.json'
+            index.write_text('{"providers": []}')
+            missing = publisher.subprocess.CalledProcessError(1, 'aws', stderr='NoSuchKey')
+            failure = publisher.subprocess.CalledProcessError(1, 'magicmtn-publish-provider')
+            with patch.object(publisher.subprocess, 'run', side_effect=missing), patch.object(publisher, 'aws', return_value='{}') as aws, patch.object(publisher, 'record_publication', side_effect=[None, failure]):
+                with self.assertRaises(publisher.subprocess.CalledProcessError):
+                    publisher.publish(index, {}, {'providers': []})
+            self.assertEqual([call.args[1] for call in aws.call_args_list], ['put-object'])
 
 
 if __name__ == '__main__':
