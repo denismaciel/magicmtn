@@ -16,7 +16,6 @@ mod execution;
 mod mcp;
 mod pi;
 mod provider_registry;
-mod release;
 mod sandbox_scp;
 mod telemetry;
 mod uninstall;

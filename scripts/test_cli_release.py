@@ -76,45 +76,79 @@ class ReleaseTest(unittest.TestCase):
             with self.assertRaises((ValueError, subprocess.CalledProcessError)):
                 release.trust(self.trust)
 
-    def test_skip_build_never_skips_notarization_or_uploads_on_failure(self):
-        (self.root / "magic-darwin-arm64").write_bytes(self.binary)
-        for channel in release.CHANNELS:
-            with mock.patch("sys.argv", ["publish-cli.py", "--skip-build", "--channel", channel, "--signing-key", str(self.private), "--artifacts", str(self.root)]), \
-                    mock.patch.object(release, "trust", return_value=self.configuration), \
-                    mock.patch.object(release, "notary_credentials", return_value=[]), \
-                    mock.patch.object(release, "source_commit", return_value="a" * 40), \
-                    mock.patch.object(release, "verify_bootstrap"), \
-                    mock.patch.object(release, "notarize", side_effect=ValueError("not accepted")), \
-                    mock.patch("sys.platform", "darwin"), mock.patch.object(publisher.subprocess, "run") as run:
-                with self.assertRaisesRegex(ValueError, "not accepted"):
-                    publisher.main()
-                run.assert_not_called()
+    def test_checksum_publication_requires_all_artifacts_before_upload(self):
+        with mock.patch("sys.argv", ["publish-cli.py", "--skip-build", "--artifacts", str(self.root), "--output", str(self.root / "output")]), \
+                mock.patch.object(publisher.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "Missing or empty artifact"):
+                publisher.main()
+            run.assert_not_called()
 
-    def test_publication_promotes_only_a_verified_complete_release(self):
-        # Exercise real signing and hashes; replace only Apple and network access.
+    def test_checksum_publication_promotes_only_a_complete_release(self):
         import types
-        for platform in release.PLATFORMS:
+        for platform in publisher.PLATFORMS:
             (self.root / ("magic-" + platform)).write_bytes(self.binary)
         output = self.root / "output"
-        with mock.patch("sys.argv", ["publish-cli.py", "--skip-build", "--channel", "alpha", "--signing-key", str(self.private), "--artifacts", str(self.root), "--output", str(output)]), \
-                mock.patch.object(release, "trust", return_value=self.configuration), \
-                mock.patch.object(release, "notary_credentials", return_value=[]), \
-                mock.patch.object(release, "source_commit", return_value="a" * 40), \
-                mock.patch.object(release, "verify_bootstrap"), \
-                mock.patch.object(release, "notarize"), \
-                mock.patch.object(release, "verify_notarization"), \
-                mock.patch("sys.platform", "darwin"), \
-                mock.patch.object(publisher, "subprocess", types.SimpleNamespace(run=mock.Mock(), CalledProcessError=subprocess.CalledProcessError)) as process:
+        process = types.SimpleNamespace(
+            run=mock.Mock(), check_output=mock.Mock(side_effect=["a" * 40, b""]),
+            CalledProcessError=subprocess.CalledProcessError,
+        )
+        with mock.patch("sys.argv", ["publish-cli.py", "--skip-build", "--artifacts", str(self.root), "--output", str(output)]), \
+                mock.patch.object(publisher, "subprocess", process):
             publisher.main()
-            calls = process.run.call_args_list
-            keys = [call.args[0][4] for call in calls]
-            self.assertEqual(len(keys), 9)
-            self.assertTrue(keys[-1].endswith("/latest.json"))
-            for platform in release.PLATFORMS:
-                self.assertTrue(any(key.endswith("/magic-" + platform) for key in keys[:-1]))
-            payload = release.verify_envelope((output / "release.json").read_bytes(), self.configuration)
-            release.verify_artifacts(payload, self.root)
-            self.assertEqual(payload["channel"], "alpha")
+        destinations = [call.args[0][4] for call in process.run.call_args_list]
+        self.assertTrue(destinations[-2].endswith("/latest.json"))
+        self.assertTrue(destinations[-1].endswith("/install.sh"))
+        manifest = json.loads((output / "release.json").read_text())
+        for platform in publisher.PLATFORMS:
+            digest = hashlib.sha256(self.binary).hexdigest()
+            self.assertEqual(manifest["platforms"][platform], digest)
+            self.assertEqual((output / ("magic-" + platform + ".sha256")).read_text(), digest + "  magic\n")
+        self.assertIn(manifest["release"], (output / "install.sh").read_text())
+        self.assertNotIn("@RELEASE@", (output / "install.sh").read_text())
+
+    def test_failed_artifact_upload_does_not_promote_release(self):
+        import types
+        for platform in publisher.PLATFORMS:
+            (self.root / ("magic-" + platform)).write_bytes(self.binary)
+        process = types.SimpleNamespace(
+            run=mock.Mock(side_effect=subprocess.CalledProcessError(1, "aws")),
+            check_output=mock.Mock(side_effect=["a" * 40, b""]),
+            CalledProcessError=subprocess.CalledProcessError,
+        )
+        with mock.patch("sys.argv", ["publish-cli.py", "--skip-build", "--artifacts", str(self.root), "--output", str(self.root / "output")]), \
+                mock.patch.object(publisher, "subprocess", process):
+            with self.assertRaises(subprocess.CalledProcessError):
+                publisher.main()
+        for call in process.run.call_args_list:
+            self.assertNotIn(call.args[0][4].rsplit("/", 1)[-1], ("latest.json", "install.sh"))
+
+    def test_checksum_installer_preserves_existing_binary_on_mismatch(self):
+        home = self.root / "checksum-home"
+        target = home / ".local/bin"
+        target.mkdir(parents=True)
+        (target / "magic").write_bytes(b"existing installation")
+        fixture = self.root / "checksum-fixture"
+        fixture.mkdir()
+        (fixture / "binary").write_bytes(b'#!/bin/sh\ntouch "$HOME/executed"\n')
+        (fixture / "checksum").write_text("0" * 64 + "  magic\n")
+        tools = self.root / "checksum-tools"
+        tools.mkdir()
+        (tools / "uname").write_text('#!/bin/sh\n[ "$1" = -s ] && echo Linux || echo x86_64\n')
+        (tools / "curl").write_text('#!/bin/sh\ncase "$2" in *.sha256) cp "$FIXTURE_DIR/checksum" "$4";; *) cp "$FIXTURE_DIR/binary" "$4";; esac\n')
+        for tool in tools.iterdir():
+            tool.chmod(0o755)
+        script = self.root / "checksum-install.sh"
+        script.write_text((publisher.ROOT / "scripts/install-checksum.sh").read_text().replace("@RELEASE@", "test-release"))
+        env = {**os.environ, "HOME": str(home), "FIXTURE_DIR": str(fixture), "PATH": str(tools) + os.pathsep + os.environ["PATH"]}
+        result = subprocess.run(["sh", str(script), "--no-modify-shell"], env=env, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((target / "magic").read_bytes(), b"existing installation")
+        self.assertFalse((home / "executed").exists())
+        (fixture / "binary").write_bytes(self.binary)
+        (fixture / "checksum").write_text(hashlib.sha256(self.binary).hexdigest() + "  magic\n")
+        result = subprocess.run(["sh", str(script), "--no-modify-shell"], env=env, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((target / "magic").read_bytes(), self.binary)
 
     def test_bootstrap_must_match_the_independent_application_deployment(self):
         for body, location in [(b"attacker", release.INSTALLER_URL), (release.render_installer(self.configuration).encode(), "https://untrusted.example/install.sh")]:

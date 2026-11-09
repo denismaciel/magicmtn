@@ -1,4 +1,3 @@
-use crate::release;
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 use std::{
@@ -49,29 +48,34 @@ async fn get(client: &reqwest::Client, url: &str, limit: usize) -> Result<Vec<u8
 }
 
 async fn update(base: &str, executable: &Path, platform: &str) -> Result<String> {
-    update_with_trust(base, executable, platform, &release::Trust::pinned()?).await
-}
-
-async fn update_with_trust(
-    base: &str,
-    executable: &Path,
-    platform: &str,
-    trust: &release::Trust,
-) -> Result<String> {
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(120))
         .build()?;
     let bytes = get(&client, &format!("{base}/latest.json"), 32 * 1024).await?;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_secs();
-    let manifest = release::verify(&bytes, trust, now)?;
+    #[derive(serde::Deserialize)]
+    struct Manifest {
+        release: String,
+        platforms: std::collections::BTreeMap<String, String>,
+    }
+    let manifest: Manifest = serde_json::from_slice(&bytes).context("invalid release manifest")?;
     let release = &manifest.release;
+    anyhow::ensure!(
+        !release.is_empty()
+            && release.len() <= 100
+            && release
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-'),
+        "invalid release identifier"
+    );
     let expected = manifest
         .platforms
         .get(platform)
-        .context("no signed release for this platform")?;
+        .context("no release for this platform")?;
+    anyhow::ensure!(
+        expected.len() == 64 && expected.bytes().all(|c| c.is_ascii_hexdigit()),
+        "invalid release SHA-256"
+    );
     let installed = sha256(&fs::read(executable).context("reading installed magic")?);
     if installed.eq_ignore_ascii_case(expected) {
         return Ok(format!("magic is already the latest version ({release})"));
@@ -94,9 +98,6 @@ async fn update_with_trust(
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(staged.path(), fs::Permissions::from_mode(0o755))?;
-    }
-    if platform == "darwin-arm64" {
-        release::verify_macos_binary(staged.path(), trust)?;
     }
     let status = Command::new(staged.path())
         .arg("--version")
@@ -199,16 +200,11 @@ mod tests {
         }
     }
 
-    fn signed_manifest(hash: &str) -> (release::Trust, Vec<u8>) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        release::sign_test_manifest(json!({
-            "schema":1,"release":"test-release","channel":"beta","source_commit":"a".repeat(40),
-            "issued_at":now,"expires_at":now+3600,"apple_team_id":"ABCDE12345",
-            "platforms":release::PLATFORMS.iter().map(|name| (name.to_string(), hash.to_string())).collect::<std::collections::BTreeMap<_,_>>()
+    fn checksum_manifest(hash: &str) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "release": "test-release", "platforms": {"linux-arm64": hash}
         }))
+        .unwrap()
     }
 
     #[cfg(unix)]
@@ -219,10 +215,8 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let executable = directory.path().join("magic");
         fs::write(&executable, old)?;
-        // Script fixtures execute on either host; production macOS updates also
-        // require a real Developer ID certificate, which test keys cannot supply.
         let name = "linux-arm64";
-        let (trust, manifest) = signed_manifest(&sha256(new));
+        let manifest = checksum_manifest(&sha256(new));
         let payload = new.to_vec();
         let app = Router::new()
             .route("/latest.json", get(move || async move { manifest.clone() }))
@@ -234,12 +228,12 @@ mod tests {
         let base = format!("http://{}", listener.local_addr()?);
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         assert_eq!(
-            update_with_trust(&base, &executable, name, &trust).await?,
+            update(&base, &executable, name).await?,
             "Updated magic to release test-release"
         );
         assert_eq!(fs::read(&executable)?, new);
         assert_eq!(
-            update_with_trust(&base, &executable, name, &trust).await?,
+            update(&base, &executable, name).await?,
             "magic is already the latest version (test-release)"
         );
         server.abort();
@@ -250,61 +244,36 @@ mod tests {
     #[tokio::test]
     async fn rejected_releases_preserve_the_installed_executable() -> Result<()> {
         let old = b"#!/bin/sh\necho old\n";
-        for attack in ["checksum", "unsigned", "wrong-publisher", "tampered"] {
+        for (manifest, payload) in [
+            (
+                checksum_manifest(&sha256(b"expected binary")),
+                "wrong binary",
+            ),
+            (
+                br#"{"release":"../escape","platforms":{"linux-arm64":"bad"}}"#.to_vec(),
+                "",
+            ),
+            (checksum_manifest("invalid hash"), ""),
+            (br#"{"release":"test-release","platforms":{}}"#.to_vec(), ""),
+            (b"invalid JSON".to_vec(), ""),
+            (
+                checksum_manifest(&sha256(b"cannot execute")),
+                "cannot execute",
+            ),
+        ] {
             let directory = tempfile::tempdir()?;
             let executable = directory.path().join("magic");
             fs::write(&executable, old)?;
-            let (trust, mut manifest) = signed_manifest(&sha256(old));
-            match attack {
-                "unsigned" => {
-                    manifest = serde_json::to_vec(
-                        &json!({"release":"test-release","platforms":{"linux-arm64":sha256(old)}}),
-                    )?
-                }
-                "wrong-publisher" => manifest = signed_manifest(&sha256(old)).1,
-                "tampered" => {
-                    let mut value: serde_json::Value = serde_json::from_slice(&manifest)?;
-                    value["payload"] = "e30=".into();
-                    manifest = serde_json::to_vec(&value)?;
-                }
-                "checksum" => {
-                    let (new_trust, signed) = signed_manifest(&sha256(b"expected new binary"));
-                    manifest = signed;
-                    let app = Router::new()
-                        .route("/latest.json", get(move || async move { manifest.clone() }))
-                        .route(
-                            "/releases/test-release/magic-linux-arm64",
-                            get(|| async { "wrong binary" }),
-                        );
-                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-                    let base = format!("http://{}", listener.local_addr()?);
-                    let server =
-                        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-                    assert!(
-                        update_with_trust(&base, &executable, "linux-arm64", &new_trust)
-                            .await
-                            .unwrap_err()
-                            .to_string()
-                            .contains("SHA-256")
-                    );
-                    assert_eq!(fs::read(&executable)?, old);
-                    server.abort();
-                    continue;
-                }
-                _ => unreachable!(),
-            }
-            let app =
-                Router::new().route("/latest.json", get(move || async move { manifest.clone() }));
+            let app = Router::new()
+                .route("/latest.json", get(move || async move { manifest.clone() }))
+                .route(
+                    "/releases/test-release/magic-linux-arm64",
+                    get(move || async move { payload }),
+                );
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
             let base = format!("http://{}", listener.local_addr()?);
             let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-            // Even an "already installed" hash cannot bypass authentication.
-            assert!(
-                update_with_trust(&base, &executable, "linux-arm64", &trust)
-                    .await
-                    .is_err(),
-                "{attack}"
-            );
+            assert!(update(&base, &executable, "linux-arm64").await.is_err());
             assert_eq!(fs::read(&executable)?, old);
             server.abort();
         }

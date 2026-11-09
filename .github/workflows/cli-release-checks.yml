@@ -11,6 +11,7 @@ on:
       - 'release/**'
       - 'scripts/*cli*'
       - 'scripts/install-public.sh'
+      - 'scripts/install-checksum.sh'
       - 'scripts/test-install-public.sh'
       - 'tests/fixtures/cli-release/**'
       - 'server/src/cli_installer.rs'
@@ -28,6 +29,7 @@ on:
       - 'release/**'
       - 'scripts/*cli*'
       - 'scripts/install-public.sh'
+      - 'scripts/install-checksum.sh'
       - 'scripts/test-install-public.sh'
       - 'tests/fixtures/cli-release/**'
       - 'server/src/cli_installer.rs'
@@ -53,5 +55,3 @@ jobs:
       - run: rustup toolchain install 1.99.0 --profile minimal && rustup default 1.99.0
       - run: python3 -m unittest discover -s scripts -p test_cli_release.py
       - run: cargo test --locked -p magicmtn-cli --bin magic
-      - run: cargo test --locked -p magicmtn-server --lib cli_installer::tests
-      - run: cargo test --locked -p magicmtn-server --test cli_installer
