@@ -34,16 +34,8 @@ pub(super) fn start(api: &Api, id: Uuid, directory: &Path) -> Result<()> {
         .suffix(".log")
         .tempfile()?
         .keep()?;
-    let mut command = Command::new(std::env::current_exe()?);
+    let mut command = transfer_command(api, id, &directory)?;
     command
-        .args([
-            "--server-url",
-            api.base.as_str(),
-            "pi",
-            "relay",
-            &id.to_string(),
-        ])
-        .arg(directory)
         .stdin(Stdio::null())
         .stdout(log.try_clone()?)
         .stderr(log);
@@ -62,6 +54,17 @@ pub(super) fn start(api: &Api, id: Uuid, directory: &Path) -> Result<()> {
         log_path.display()
     );
     Ok(())
+}
+
+fn transfer_command(api: &Api, id: Uuid, directory: &Path) -> Result<Command> {
+    let mut command = Command::new(std::env::current_exe()?);
+    if cfg!(feature = "development-server") {
+        command.args(["--server-url", api.base.as_str()]);
+    }
+    command
+        .args(["pi", "relay", &id.to_string()])
+        .arg(directory);
+    Ok(command)
 }
 
 fn archive(directory: &Path, destination: &Path) -> Result<()> {
@@ -187,6 +190,31 @@ mod tests {
     use super::*;
     use flate2::read::GzDecoder;
     use std::io::Read;
+
+    #[test]
+    fn background_command_is_accepted_by_this_cli_build() -> Result<()> {
+        use clap::Parser;
+        let server = if cfg!(feature = "development-server") {
+            "http://127.0.0.1:4321/"
+        } else {
+            "https://api.magicmtn.ai/"
+        };
+        let api = Api::new(server)?;
+        let id = Uuid::new_v4();
+        let directory = Path::new("/working tree");
+        let command = transfer_command(&api, id, directory)?;
+        let parsed = crate::Cli::try_parse_from(
+            std::iter::once(std::ffi::OsStr::new("magic")).chain(command.get_args()),
+        )?;
+        assert_eq!(
+            parsed.server_url().trim_end_matches('/'),
+            server.trim_end_matches('/')
+        );
+        assert!(matches!(parsed.command, Some(crate::Commands::Pi {
+            command: super::super::Commands::Relay { id: parsed_id, directory: parsed_directory }
+        }) if parsed_id == id && parsed_directory == directory));
+        Ok(())
+    }
 
     #[test]
     fn archive_copies_working_files_and_only_tracked_paths_in_the_current_directory() -> Result<()>
