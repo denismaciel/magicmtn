@@ -5,6 +5,8 @@ import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import { Container, CURSOR_MARKER, KeybindingsManager, ScrollView, Spacer, TUI_KEYBINDINGS, TuiMainScreen, VStack, renderFakeCursor, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import workspaceStatus from "../workspace.js";
 
+const hasDots = (line) => /[\u2801-\u28ff]/u.test(line);
+
 function fixture(t, { mode = "tui", sandbox = true, rows = 40, initialText = "", entries = [], headerRows = 8, nested = false, previousEditor } = {}) {
   const previous = process.env.MAGICMTN_WORKSPACE_INFO;
   t.after(() => {
@@ -84,19 +86,17 @@ test("sandbox welcome renders the faint dotted logo and copy above the editor", 
   const f = fixture(t);
   const widget = f.widgets.get("magicmtn-welcome");
   const renderedLines = widget.render(80);
-  for (const line of renderedLines.filter((line) => line.includes("⣿"))) {
-    assert.match(line, /\x1b\[2m\x1b\[90m.*⣿.*\x1b\[39m\x1b\[22m$/);
+  const artwork = renderedLines.filter(hasDots);
+  assert.ok(artwork.length >= 8, "normal terminals show a detailed mountain");
+  assert.ok(new Set(artwork.join("")).size > 15, "curves use partial Braille cells");
+  for (const line of artwork) {
+    assert.match(line, /\x1b\[2m\x1b\[90m.*[\u2801-\u28ff].*\x1b\[39m\x1b\[22m$/u);
   }
   const lines = renderedLines.map(stripTerminalSequences).map((line) => line.trimEnd());
-  assert.deepEqual(lines.filter((line) => line.includes("⣿")), [
-    ...Array(3).fill(" ".repeat(49) + "⣿⣿⣿⣿⣿⣿⣿⣿"),
-    ...Array(3).fill(" ".repeat(40) + "⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿"),
-    ...Array(3).fill(" ".repeat(22) + "⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿"),
-  ]);
   for (const width of [40, 80, 120]) {
     const rendered = widget.render(width).map(stripTerminalSequences);
-    const base = rendered.find((line) => line.trim() === "⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿");
-    const copy = rendered.slice(rendered.findLastIndex((line) => line.includes("⣿")) + 1)
+    const base = rendered.find(hasDots);
+    const copy = rendered.slice(rendered.findLastIndex(hasDots) + 1)
       .filter((line) => line.trim());
     assert.equal(copy.map((line) => line.trim()).join(" "), "MagicMtn");
     assert.doesNotMatch(rendered.join("\n"), /Atop the MagicMtn sandbox/);
@@ -120,7 +120,8 @@ test("short terminals use a compact mountain and retain the editor", (t) => {
   const lines = f.widgets.get("magicmtn-welcome").render(80);
   assert.match(stripTerminalSequences(lines[0]), /^   Tip:/);
   assert.ok(lines.length <= 16);
-  assert.equal(lines.join("\n").match(/⣿/g).length, 7);
+  const artwork = lines.filter(hasDots);
+  assert.ok(artwork.length >= 3 && artwork.length <= 8, "short terminals use a compact curved mountain");
   assert.equal(f.tui.render(80).length, 24);
   assert.match(lines.join("\n"), /https:\/\/control\.magicmtn\.ai\//);
 });
@@ -134,8 +135,8 @@ for (const nested of [false, true]) {
       assert.equal(lines[8], "[Extensions]");
       assert.match(lines[11], /^   Tip:/);
       const bodyStart = lines.findIndex((line, index) => index > 11 && !line.trim()) + 1;
-      const first = lines.findIndex((line) => line.includes("⣿"));
-      const last = lines.findLastIndex((line) => line.includes("⣿"));
+      const first = lines.findIndex(hasDots);
+      const last = lines.findLastIndex(hasDots);
       const bodyEnd = lines.length - f.editor().render(width).length - 3;
       assert.ok(Math.abs((first - bodyStart) - (bodyEnd - last - 1)) <= 1);
       const base = lines[last].trimEnd();
@@ -143,6 +144,20 @@ for (const nested of [false, true]) {
     }
   });
 }
+
+test("mountain detail scales with terminal space and never clips the input", (t) => {
+  const f = fixture(t, { rows: 70 });
+  const widget = f.widgets.get("magicmtn-welcome");
+  const tall = widget.render(80).filter(hasDots);
+  assert.ok(tall.length >= 20, "tall terminals show the full dotted mountain");
+  for (const [rows, width] of [[70, 80], [40, 40], [32, 20], [24, 10]]) {
+    f.tui.terminal.rows = rows;
+    const rendered = f.tui.render(width);
+    assert.ok(rendered.length <= rows);
+    assert.ok(widget.render(width).every((line) => visibleWidth(line) <= width));
+    assert.equal(f.editor().getText(), "");
+  }
+});
 
 test("welcome re-centers when the terminal is resized", (t) => {
   const f = fixture(t);
@@ -158,7 +173,7 @@ test("sparkles pulse one at a time at different positions and loop", (t) => {
   const f = fixture(t);
   const frames = [];
   for (let frame = 0; frame <= 61; frame++) {
-    const logo = f.widgets.get("magicmtn-welcome").render(80).filter((line) => /⣿/.test(line)).map(stripTerminalSequences);
+    const logo = f.widgets.get("magicmtn-welcome").render(80).filter((line) => line.includes("\x1b[2m")).map(stripTerminalSequences);
     assert.ok((logo.join("\n").match(/[.*+]/g) || []).length <= 1);
     frames.push(logo.join("\n"));
     t.mock.timers.tick(180);
@@ -206,7 +221,7 @@ for (const [name, data] of [
     assert.ok(before.length > after.length);
     assert.equal(after.length, 1);
     const remaining = after.join("\n");
-    assert.doesNotMatch(remaining, /⣿|Tip:|GitHub|MCPs|control\.magicmtn\.ai/);
+    assert.doesNotMatch(remaining, /[\u2801-\u28ff]|Tip:|GitHub|MCPs|control\.magicmtn\.ai/u);
     assert.ok(after.some((line) => line.trim() === "MagicMtn"));
     assert.doesNotMatch(f.editor().render(80).join("\n"), /Atop the MagicMtn sandbox/);
     assert.equal(f.subscriptions(), 0);
@@ -226,7 +241,7 @@ test("starting the agent dismisses the tip without requiring terminal input", (t
   const f = fixture(t);
   f.emit("agent_start");
   const rendered = f.widgets.get("magicmtn-welcome").render(80).join("\n");
-  assert.doesNotMatch(rendered, /⣿|Tip:|GitHub|MCPs|control\.magicmtn\.ai/);
+  assert.doesNotMatch(rendered, /[\u2801-\u28ff]|Tip:|GitHub|MCPs|control\.magicmtn\.ai/u);
   assert.match(rendered, /MagicMtn/);
   assert.equal(f.subscriptions(), 0);
   assert.deepEqual(f.input, []);
@@ -249,7 +264,7 @@ test("terminal reports and focus changes leave the welcome visible", (t) => {
     assert.match(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /Tip:/);
   }
   f.send("x");
-  assert.doesNotMatch(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /⣿/);
+  assert.doesNotMatch(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /[\u2801-\u28ff]/u);
 });
 
 test("dim input placeholder is visual only, retains the cursor, and fits narrow terminals", (t) => {

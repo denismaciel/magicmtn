@@ -4,23 +4,83 @@ import { join } from "node:path";
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Text, renderFakeCursor, stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-const LOGO = `                           ⣿⣿⣿⣿⣿⣿⣿⣿
-                           ⣿⣿⣿⣿⣿⣿⣿⣿
-                           ⣿⣿⣿⣿⣿⣿⣿⣿
-
-                  ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
-                  ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
-                  ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
-
-⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
-⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿`;
+// BEGIN GENERATED BRAND ART
+const LOGOS = [
+  {
+    "width": 49,
+    "lines": [
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⢀⣤⣤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⠀⠀⠀⠀⢀⣾⣿⣿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣄⢀⣰⣿⣿⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣇⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⣷⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⣿⢿⣿⢷⠀⠀⠀",
+      "⠀⠀⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⢿⢿⢟⢿⢟⢟⢟⢟⢟⢿⠿⢿⢿⢿⢿⣿⢿⣿⢿⣿⢿⣷⠀⠀",
+      "⠀⠀⢀⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⢿⢿⢽⢝⢽⢝⢵⢝⢕⢝⢕⢝⢕⢕⢕⠕⢕⠕⢕⠕⢕⠝⢝⠝⢿⢿⣿⢿⣿⢷⠀",
+      "⠀⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⢿⢿⢽⢽⢽⢝⢽⢝⢵⢝⢵⢝⢕⢝⢕⢕⢕⢕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢝⠝⢽⢿⡅",
+      "⢀⣿⣿⣿⣿⣿⣿⣿⣿⢿⣿⢿⢽⢿⢽⢽⢽⢝⢽⢝⢽⢝⢵⢝⢕⢝⢕⢕⢕⢕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠝⢕",
+      "⠈⢿⣿⣿⣿⢿⣽⢿⣽⢿⢽⢿⢽⢿⢽⢽⢽⢝⢽⢝⢵⢝⢕⢝⢕⢝⢕⢕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⠅",
+      "⠀⠀⠙⠛⢽⢿⣽⢿⢽⢿⢽⢿⢽⢽⢽⢝⢽⢝⢵⢝⢵⢝⢕⢝⢕⢕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⠕⠁⠀",
+      "⠀⠀⠀⠀⠀⠀⠉⠙⠙⠿⢽⢽⢽⢝⢽⢝⢽⢝⢵⢝⢕⢝⢕⢕⢕⢕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⠕⠕⠁⠁⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠑⠙⠑⠙⠕⠝⠕⠕⠕⠕⠕⠕⠕⠕⠕⠕⠕⠕⠕⠕⠑⠑⠁⠁⠁⠀⠀⠀⠀⠀⠀⠀⠀"
+    ]
+  },
+  {
+    "width": 28,
+    "lines": [
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣄⠀⢀⣼⣿⣷⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣿⣿⣿⣿⣷⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣇⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀⠀⠀",
+      "⠀⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⣄⠀⠀",
+      "⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⢿⢿⢿⢿⢟⢿⢟⢿⠿⢿⢿⣿⢿⣿⢄⠀",
+      "⢀⣼⣿⣿⣿⣿⣿⣿⢿⢿⢝⢽⢝⢵⢝⢕⢕⢕⠕⢕⠕⢕⠕⢝⠝⢿⢿⠄",
+      "⢼⣿⣿⣿⢿⣽⢿⢽⢽⢽⢝⢵⢝⢕⢝⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⠅",
+      "⠈⠙⠿⢽⢿⢽⢿⢽⢝⢽⢝⢕⢝⢕⢕⢕⠕⢕⠕⢕⠕⢕⠕⢕⠕⠕⠑⠀",
+      "⠀⠀⠀⠀⠀⠁⠉⠙⠙⠑⠙⠕⠝⠕⠕⠕⠕⠕⠕⠕⠕⠑⠑⠁⠁⠀⠀⠀"
+    ]
+  },
+  {
+    "width": 14,
+    "lines": [
+      "⠀⠀⠀⠀⠀⠀⡀⠀⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⠀⢀⣾⣿⡄⠀⠀⠀⠀⠀⠀",
+      "⠀⠀⠀⢀⣾⣿⣿⣷⠀⢠⣄⠀⠀⠀",
+      "⠀⠀⢀⣾⣿⣿⣿⣿⣿⣿⣿⣇⠀⠀",
+      "⠀⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣄⠀",
+      "⢠⣿⣿⣿⢿⢿⢿⢟⢝⠝⢝⠟⢿⠄",
+      "⠹⢿⢽⢿⢽⢝⢕⠕⢕⠕⢕⠕⢕⠕",
+      "⠀⠀⠀⠉⠁⠉⠑⠑⠑⠁⠁⠁⠀⠀"
+    ]
+  },
+  {
+    "width": 8,
+    "lines": [
+      "⠀⠀⠀⣤⠀⠀⠀⠀",
+      "⠀⠀⣼⣿⣧⣴⠀⠀",
+      "⢀⣼⣿⢿⢿⢿⢷⠀",
+      "⠈⠙⠙⠕⠕⠕⠑⠁"
+    ]
+  }
+];
+// END GENERATED BRAND ART
 
 const WELCOME = "Atop the MagicMtn sandbox, do your most ambitious work";
-const COMPACT_LOGO = "      ⣿\n    ⣿ ⣿\n⣿ ⣿ ⣿ ⣿";
 const SPARKLE_FRAMES = ["", ".", "+", "*", "+", ".", "", "", "", "", "", ""];
-const SPARKLE_POSITIONS = [[1, 30], [5, 21], [9, 4], [9, 31], [5, 31]];
-const COMPACT_SPARKLE_POSITIONS = [[0, 6], [1, 4], [2, 0], [2, 6], [1, 6]];
 
 export function providerLabel(provider) {
   return ({ "apple-container": "Apple Container", exe: "exe.dev", aws: "AWS Bedrock", fireworks: "Fireworks", baseten: "Baseten" })[provider] || provider;
@@ -124,15 +184,21 @@ export default function workspaceStatus(pi) {
           if (height < 4 + welcome.length) return welcome.slice(0, height);
 
           let tips = tipText.render(width);
-          const full = width >= 35 && height >= tips.length + 13 + welcome.length;
-          const logo = (full ? LOGO : COMPACT_LOGO).split("\n");
-          const positions = full ? SPARKLE_POSITIONS : COMPACT_SPARKLE_POSITIONS;
+          const fits = (logo, heading = 0) => logo.width <= width
+            && logo.lines.length + 1 + welcome.length + heading <= height;
+          const selected = LOGOS.find((logo) => fits(logo, tips.length + 1))
+            ?? LOGOS.find((logo) => fits(logo));
+          if (!selected) return welcome.slice(0, height);
+          const logo = [...selected.lines];
+          const cells = logo.flatMap((line, row) => [...line].flatMap((cell, column) =>
+            /[\u2801-\u28ff]/u.test(cell) ? [[row, column]] : []));
+          const positions = [0.1, 0.3, 0.5, 0.7, 0.9].map((fraction) => cells[Math.floor(cells.length * fraction)]);
           const sparkle = SPARKLE_FRAMES[frame % SPARKLE_FRAMES.length];
           if (sparkle) {
             const [row, column] = positions[Math.floor(frame / SPARKLE_FRAMES.length) % positions.length];
             logo[row] = logo[row].slice(0, column) + theme.fg("accent", sparkle) + logo[row].slice(column + 1);
           }
-          const logoPadding = " ".repeat(Math.max(0, Math.floor((width - (full ? 35 : 7)) / 2)));
+          const logoPadding = " ".repeat(Math.max(0, Math.floor((width - selected.width) / 2)));
           // Braille cells provide fine dots; faint theme color softens the mark on any background.
           const artwork = logo.map((line) => logoPadding
             + `\x1b[2m${theme.fg("dim", truncateToWidth(line, width - logoPadding, ""))}\x1b[22m`);
