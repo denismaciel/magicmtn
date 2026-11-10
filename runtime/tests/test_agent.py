@@ -106,6 +106,21 @@ class SupervisorTests(unittest.TestCase):
         self.assertEqual(json.loads(header)["cwd"], str(destination))
         self.assertEqual(contents, transcript)
 
+    def test_completed_relay_restarts_in_same_directory_exactly_once(self):
+        workspace = str(uuid.uuid4())
+        self.supervisor.config["workspace_info"] = {"id": workspace}
+        status = pathlib.Path("/tmp") / f"magicmtn-relay-{workspace}.json"
+        self.addCleanup(lambda: status.unlink(missing_ok=True))
+        agent.atomic_json(status, {"state": "copying", "directory": self.directory.name})
+        launches = pathlib.Path(self.directory.name) / "launches"
+        self.run_supervisor("import pathlib,time,os; p=pathlib.Path('launches'); p.open('a').write(os.environ['MAGICMTN_RELAY_READY']); time.sleep(0.3)")
+        wait_for(launches.exists)
+        self.assertEqual(launches.read_text(), "0")
+        agent.atomic_json(status, {"state": "complete", "directory": self.directory.name})
+        wait_for(lambda: launches.read_text() == "01")
+        wait_for(lambda: self.supervisor.state == "exited")
+        self.assertEqual(launches.read_text(), "01")
+
     def test_ambiguous_saved_session_reports_resume_failure(self):
         self.offline = False
         self.supervisor.harness.sessions.mkdir(exist_ok=True)

@@ -73,9 +73,10 @@ class Supervisor:
         # through the authenticated relay as a Pi startup error.
         return ["pi"]
 
-    def environment(self):
+    def environment(self, relay_directory=None):
         environment = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor")
         environment.update(self.harness.environment())
+        environment["MAGICMTN_RELAY_READY"] = "1" if relay_directory else "0"
         if self.config.get("integrations_origin"):
             environment["MAGICMTN_INTEGRATIONS_CONFIG"] = str(self.directory / "integrations.json")
         if self.config.get("integrations_origin") and self.config.get("github_enabled", True):
@@ -110,6 +111,7 @@ class Supervisor:
                 return
             command = self.command
             destination = self.relay_directory()
+            self.child_relay_directory = destination
             if destination:
                 self.config["workspace"] = destination
             if self.command[0] == "pi":
@@ -121,7 +123,7 @@ class Supervisor:
             wrapper = [sys.executable, "-c", "import fcntl,os,sys,termios;fcntl.ioctl(0,termios.TIOCSCTTY,0);os.execvp(sys.argv[1],sys.argv[1:])"]
             self.child = subprocess.Popen(wrapper + command, stdin=slave, stdout=slave, stderr=slave,
                                           cwd=self.config.get("workspace", "/workspace"),
-                                          env=self.environment(), start_new_session=True, close_fds=True)
+                                          env=self.environment(destination), start_new_session=True, close_fds=True)
             os.close(slave)
             os.set_blocking(master, False)
             self.master = master
@@ -170,7 +172,7 @@ class Supervisor:
             with self.lock:
                 if self.child is child:
                     restart = (code == 0 and destination
-                               and destination != self.config.get("workspace", "/workspace")
+                               and destination != self.child_relay_directory
                                and self.desired == "running" and not self.closed.is_set())
                     self.exit_code = code
                     self.state = "stopped" if self.desired == "stopped" else "exited"

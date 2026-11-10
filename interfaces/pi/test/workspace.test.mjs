@@ -392,3 +392,26 @@ test("completed relay in the current directory does not restart Pi", (t) => {
   assert.equal(f.shutdowns(), 0);
   assert.equal(f.widgets.has("magicmtn-relay"), false);
 });
+
+for (const completesBeforeStartup of [false, true]) {
+  test(`relay reloads the current directory once when completion is ${completesBeforeStartup ? "before" : "after"} extension startup`, (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    const previous = process.env.MAGICMTN_RELAY_READY;
+    process.env.MAGICMTN_RELAY_READY = "0";
+    t.after(() => {
+      if (previous === undefined) delete process.env.MAGICMTN_RELAY_READY;
+      else process.env.MAGICMTN_RELAY_READY = previous;
+    });
+    const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
+    t.after(() => rmSync(status, { force: true }));
+    writeFileSync(status, JSON.stringify({ state: completesBeforeStartup ? "complete" : "copying", directory: "/workspace" }));
+    const f = fixture(t);
+    writeFileSync(status, JSON.stringify({ state: "complete", directory: "/workspace" }));
+    t.mock.timers.tick(3000);
+    assert.equal(f.shutdowns(), 1);
+    process.env.MAGICMTN_RELAY_READY = "1";
+    f.emit("session_start");
+    t.mock.timers.tick(3000);
+    assert.equal(f.shutdowns(), 1);
+  });
+}
