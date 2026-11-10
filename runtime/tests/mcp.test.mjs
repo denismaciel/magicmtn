@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import mcpCatalog from "../mcp.js";
 
 test("Pi MCP tools use the scoped broker token and fetch the current catalog", async () => {
@@ -54,6 +55,21 @@ test("Pi MCP tools use the scoped broker token and fetch the current catalog", a
     assert.equal(linear.content[0].text, "Linear (connection-two) — 1 tool\n- list_issues");
     const called = await tools.get("mcp_call").execute("call-id", {connection_id: "connection-two", tool: "list_issues", arguments: {query: "api"}});
     assert.match(called.content[0].text, /issue found/);
+    const theme = {fg(_color, text) { return text; }};
+    const callTool = tools.get("mcp_call");
+    const args = {tool: "get_issue", arguments: {id: "ROD-60", fields: ["description"]}};
+    const context = {args, isPartial: false, isError: false};
+    assert.deepEqual(callTool.renderCall(args, theme, context).render(80), []);
+    const compact = callTool.renderResult(called, {expanded: false}, theme, context);
+    assert.deepEqual(compact.render(80), ["Called get_issue for ROD-60"]);
+    assert.equal(compact.render(12).length, 1);
+    assert.ok(visibleWidth(compact.render(12)[0]) <= 12);
+    assert.match(callTool.renderResult(called, {expanded: true}, theme, context).render(80).join("\n"), /issue found/);
+    assert.deepEqual(callTool.renderCall(args, theme, {...context, isPartial: true}).render(80), ["Calling get_issue for ROD-60…"]);
+    assert.deepEqual(callTool.renderResult(called, {expanded: false}, theme, {...context, isError: true}).render(80), ["Failed: get_issue for ROD-60"]);
+    assert.deepEqual(callTool.renderResult(called, {expanded: false}, theme, {args: {}}).render(80), ["Called MCP tool"]);
+    const catalogTool = tools.get("mcp_catalog");
+    assert.deepEqual(catalogTool.renderResult(detail, {expanded: false}, theme, {args: {tool: "find_issues"}}).render(80), ["MCP: inspected find_issues schema"]);
     assert.equal(requests.length, 7);
     assert.ok(requests.every(request => request.authorization === "Bearer scoped-session-token"));
     assert.deepEqual(JSON.parse(requests[6].body), {connection_id: "connection-two", tool: "list_issues", arguments: {query: "api"}});
