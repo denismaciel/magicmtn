@@ -80,7 +80,6 @@ const LOGOS = [
 // END GENERATED BRAND ART
 
 const WELCOME = "Atop the MagicMtn sandbox, do your most ambitious work";
-const SPARKLE_FRAMES = ["", ".", "+", "*", "+", ".", "", "", "", "", "", ""];
 
 export function providerLabel(provider) {
   return ({ "apple-container": "Apple Container", exe: "exe.dev", aws: "AWS Bedrock", fireworks: "Fireworks", baseten: "Baseten" })[provider] || provider;
@@ -141,8 +140,6 @@ export default function workspaceStatus(pi) {
       && ["user", "assistant"].includes(entry.message.role))) return;
 
     let showWelcome = true;
-    let animation;
-    let frame = 0;
     let requestRender = () => {};
     const previousEditor = ctx.ui.getEditorComponent();
     const placeholderEditor = (tui, theme, keybindings) => {
@@ -198,15 +195,7 @@ export default function workspaceStatus(pi) {
           const selected = LOGOS.find((logo) => fits(logo, tips.length + 1))
             ?? LOGOS.find((logo) => fits(logo));
           if (!selected) return welcome.slice(0, height);
-          const logo = [...selected.lines];
-          const cells = logo.flatMap((line, row) => [...line].flatMap((cell, column) =>
-            /[\u2801-\u28ff]/u.test(cell) ? [[row, column]] : []));
-          const positions = [0.1, 0.3, 0.5, 0.7, 0.9].map((fraction) => cells[Math.floor(cells.length * fraction)]);
-          const sparkle = SPARKLE_FRAMES[frame % SPARKLE_FRAMES.length];
-          if (sparkle) {
-            const [row, column] = positions[Math.floor(frame / SPARKLE_FRAMES.length) % positions.length];
-            logo[row] = logo[row].slice(0, column) + theme.fg("accent", sparkle) + logo[row].slice(column + 1);
-          }
+          const logo = selected.lines;
           const logoPadding = " ".repeat(Math.max(0, Math.floor((width - selected.width) / 2)));
           // Braille cells provide fine dots; faint theme color softens the mark on any background.
           const artwork = logo.map((line) => logoPadding
@@ -219,7 +208,6 @@ export default function workspaceStatus(pi) {
           return [...heading, ...Array(above).fill(""), ...content, ...Array(space - above).fill("")];
         },
         invalidate() { tipText.invalidate(); copy.invalidate(); },
-        dispose() { clearInterval(animation); },
       };
       return widget;
     });
@@ -227,7 +215,6 @@ export default function workspaceStatus(pi) {
     dismissWelcome = () => {
       if (!showWelcome) return;
       showWelcome = false;
-      clearInterval(animation);
       unsubscribe?.();
       unsubscribe = undefined;
       requestRender();
@@ -239,19 +226,12 @@ export default function workspaceStatus(pi) {
       // Leave input untouched so the first key or paste still reaches Pi.
     });
     cleanupWelcome = () => {
-      clearInterval(animation);
       unsubscribe?.();
       ctx.ui.setWidget("magicmtn-welcome", undefined);
       if (ctx.ui.getEditorComponent() === placeholderEditor) ctx.ui.setEditorComponent(previousEditor);
       dismissWelcome = undefined;
       cleanupWelcome = undefined;
     };
-    animation = setInterval(() => {
-      const previous = SPARKLE_FRAMES[frame % SPARKLE_FRAMES.length];
-      frame++;
-      if (previous || SPARKLE_FRAMES[frame % SPARKLE_FRAMES.length]) requestRender();
-    }, 180);
-    animation.unref?.();
   });
   pi.on("agent_start", () => dismissWelcome?.());
   pi.on("session_shutdown", () => { cleanupWelcome?.(); cleanupRelay?.(); });

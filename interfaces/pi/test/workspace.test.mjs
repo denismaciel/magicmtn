@@ -173,31 +173,27 @@ test("welcome re-centers when the terminal is resized", (t) => {
   }
 });
 
-test("sparkles pulse one at a time at different positions and loop", (t) => {
+test("sandbox welcome artwork stays static over time", (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   const f = fixture(t);
-  const frames = [];
-  for (let frame = 0; frame <= 61; frame++) {
-    const logo = f.widgets.get("magicmtn-welcome").render(80).filter((line) => line.includes("\x1b[2m")).map(stripTerminalSequences);
-    assert.ok((logo.join("\n").match(/[.*+]/g) || []).length <= 1);
-    frames.push(logo.join("\n"));
+  const widget = f.widgets.get("magicmtn-welcome");
+  const artwork = widget.render(80).filter(hasDots);
+  assert.ok(artwork.length > 0);
+  for (let frame = 0; frame < 62; frame++) {
     t.mock.timers.tick(180);
+    assert.deepEqual(widget.render(80).filter(hasDots), artwork);
   }
-  assert.notEqual(frames[1], frames[13]);
-  assert.equal(frames[0], frames[60]);
-  assert.equal(frames[1], frames[61]);
-  assert.match(frames[3], /\*/);
-  assert.doesNotMatch(frames[8], /[.*+]/);
+  assert.equal(f.renders(), 0);
 });
 
-test("animation stops on interaction, agent start, restart and shutdown", (t) => {
+test("welcome only requests renders when dismissed", (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   const f = fixture(t);
   t.mock.timers.tick(180);
-  assert.equal(f.renders(), 1);
+  assert.equal(f.renders(), 0);
   f.emit("session_start");
   t.mock.timers.tick(180);
-  assert.equal(f.renders(), 2);
+  assert.equal(f.renders(), 0);
   f.send("x");
   const stopped = f.renders();
   t.mock.timers.tick(3600);
