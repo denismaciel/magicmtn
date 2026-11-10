@@ -189,22 +189,20 @@ export default function workspaceStatus(pi) {
           try { occupied = tui.children.reduce((height, child) => height + child.render(width).length, 0); }
           finally { measuring = false; }
           const height = Math.max(0, tui.terminal.rows - occupied);
-          if (height < 4 + welcome.length) return welcome.slice(0, height);
-
-          let tips = tipText.render(width);
-          const fits = (logo, heading = 0) => logo.width <= width
-            && logo.lines.length + 1 + welcome.length + heading <= height;
-          const selected = LOGOS.find((logo) => fits(logo, tips.length + 1))
-            ?? LOGOS.find((logo) => fits(logo));
-          if (!selected) return welcome.slice(0, height);
+          const tips = tipText.render(width);
+          const heading = [...tips, ""];
+          const selected = LOGOS.find((logo) => logo.width <= width
+            && heading.length + logo.lines.length + 1 + welcome.length <= height);
+          if (!selected) {
+            const content = heading.length + welcome.length <= height ? [...heading, ...welcome] : tips;
+            return content.slice(0, height);
+          }
           const logo = selected.lines;
           const logoPadding = " ".repeat(Math.max(0, Math.floor((width - selected.width) / 2)));
           // Braille cells provide fine dots; faint theme color softens the mark on any background.
           const artwork = logo.map((line) => logoPadding
-            + `\x1b[2m${theme.fg("dim", truncateToWidth(line, width - logoPadding, ""))}\x1b[22m`);
+            + `\x1b[2m${theme.fg("dim", truncateToWidth(line, width - logoPadding.length, ""))}\x1b[22m`);
           const content = [...artwork, "", ...welcome];
-          if (height < tips.length + 1 + content.length) tips = [];
-          const heading = tips.length ? [...tips, ""] : [];
           const space = Math.max(0, height - heading.length - content.length);
           const above = Math.min(space, Math.floor((height - heading.length - logo.length) / 2));
           return [...heading, ...Array(above).fill(""), ...content, ...Array(space - above).fill("")];

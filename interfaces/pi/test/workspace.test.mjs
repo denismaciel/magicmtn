@@ -132,6 +132,31 @@ test("short terminals use a compact mountain and retain the editor", (t) => {
 });
 
 for (const nested of [false, true]) {
+  test(`small ${nested ? "fullscreen" : "regular"} terminals keep the tip instead of the mountain`, (t) => {
+    const f = fixture(t, { rows: 23, nested });
+    const widget = f.widgets.get("magicmtn-welcome");
+    for (const rows of [23, 22, 19, 17]) {
+      f.tui.terminal.rows = rows;
+      const lines = widget.render(80);
+      assert.equal(lines.filter(hasDots).length, 0);
+      assert.match(stripTerminalSequences(lines.join("\n")), /Tip:.*GitHub[\s\S]*https:\/\/control\.magicmtn\.ai\//);
+      assert.ok(f.tui.render(80).length <= rows);
+    }
+    f.tui.terminal.rows = 40;
+    assert.ok(widget.render(80).some(hasDots), "artwork returns when there is room for it and the tip");
+  });
+}
+
+test("terminals narrower than the mountain retain the wrapped tip", (t) => {
+  const f = fixture(t, { rows: 70 });
+  const lines = f.widgets.get("magicmtn-welcome").render(7);
+  assert.equal(lines.filter(hasDots).length, 0);
+  assert.match(stripTerminalSequences(lines.join("")), /Tip:/);
+  assert.ok(lines.every((line) => visibleWidth(line) <= 7));
+  assert.ok(f.tui.render(7).length <= 70);
+});
+
+for (const nested of [false, true]) {
   test(`welcome fills the available ${nested ? "fullscreen" : "regular"} layout without a gap above the tip`, (t) => {
     const f = fixture(t, { rows: 48, headerRows: 10, nested });
     for (const width of [80, 120, 200]) {
