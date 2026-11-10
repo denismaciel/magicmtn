@@ -110,7 +110,7 @@ class RelayTest(unittest.TestCase):
                     if fail_transfer:
                         if status.exists() and json.loads(status.read_text())["state"] == "failed":
                             break
-                    elif (guest / "tracked").exists() and not status.exists():
+                    elif status.exists() and json.loads(status.read_text())["state"] == "complete":
                         break
                     time.sleep(0.05)
                 if fail_transfer:
@@ -119,7 +119,7 @@ class RelayTest(unittest.TestCase):
                 else:
                     self.assertEqual((guest / "tracked").read_text(), "current modified contents")
                     self.assertEqual([entry.name for entry in guest.iterdir()], ["tracked"])
-                    self.assertFalse(status.exists())
+                    self.assertEqual(json.loads(status.read_text()), {"state": "complete", "directory": str(guest.resolve())})
                 self.assertTrue(server.exec_bodies)
             finally:
                 server.allow_upload.set()

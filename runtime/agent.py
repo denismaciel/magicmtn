@@ -109,8 +109,11 @@ class Supervisor:
             if self.child is not None and self.child.poll() is None:
                 return
             command = self.command
+            destination = self.relay_directory()
+            if destination:
+                self.config["workspace"] = destination
             if self.command[0] == "pi":
-                command = self.harness.command()
+                command = self.harness.command(destination)
             master, slave = pty.openpty()
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", self.size[1], self.size[0], 0, 0))
             # Avoid Python preexec_fn after threads have started. The tiny
@@ -125,6 +128,16 @@ class Supervisor:
             self.exit_code = None
             self.state = "running"
         threading.Thread(target=self.read_output, args=(master, self.child), daemon=True).start()
+
+    def relay_directory(self):
+        try:
+            status = json.loads((pathlib.Path("/tmp") / f"magicmtn-relay-{self.id}.json").read_text())
+            directory = status.get("directory")
+            if status.get("state") == "complete" and directory and pathlib.Path(directory).is_absolute() and pathlib.Path(directory).is_dir():
+                return directory
+        except (OSError, ValueError):
+            pass
+        return None
 
     def read_output(self, master, child):
         try:
@@ -151,13 +164,29 @@ class Supervisor:
                 self.output_ready.set()
         finally:
             code = child.wait()
+            destination = self.relay_directory()
+            restart = False
             with self.lock:
                 if self.child is child:
+                    restart = (code == 0 and destination
+                               and destination != self.config.get("workspace", "/workspace")
+                               and self.desired == "running" and not self.closed.is_set())
                     self.exit_code = code
                     self.state = "stopped" if self.desired == "stopped" else "exited"
+                    if restart:
+                        self.exit_code = None
+                        self.state = "starting"
                     self.master = None
             self.output_ready.set()
             os.close(master)
+            if restart:
+                try:
+                    self.start_child()
+                except (OSError, ValueError, RuntimeError):
+                    with self.lock:
+                        self.exit_code = START_FAILURE_EXIT_CODE
+                        self.state = "exited"
+                    self.output_ready.set()
 
     def request(self, path, body=None):
         payload = json.dumps(body or {}).encode()

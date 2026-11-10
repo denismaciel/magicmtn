@@ -97,9 +97,18 @@ export default function workspaceStatus(pi) {
     cleanupRelay?.();
     const statusPath = join("/tmp", `magicmtn-relay-${workspace.id}.json`);
     let previous;
+    let switching = false;
     const refresh = () => {
-      let state;
-      try { state = JSON.parse(readFileSync(statusPath, "utf8")).state; } catch { /* No active relay. */ }
+      let status;
+      try { status = JSON.parse(readFileSync(statusPath, "utf8")); } catch { /* No active relay. */ }
+      const state = status?.state;
+      // Pi binds its tools and project context at startup. The supervisor
+      // resumes this session in the destination after a graceful shutdown.
+      if (state === "complete" && status.directory && status.directory !== ctx.cwd
+        && !switching && ctx.isIdle() && !ctx.hasPendingMessages()) {
+        switching = true;
+        ctx.shutdown();
+      }
       if (state === previous) return;
       previous = state;
       const message = state === "copying" ? "Copying your local files in the background…"

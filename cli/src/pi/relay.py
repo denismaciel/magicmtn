@@ -16,7 +16,7 @@ archive = directory / name
 
 def report(state):
     temporary = status.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"state": state}))
+    temporary.write_text(json.dumps({"state": state, "directory": str(directory.resolve())}))
     os.replace(temporary, status)
 
 
@@ -31,7 +31,7 @@ elif action == "extract":
             tarfile.data_filter(member, str(directory))
         source.extractall(directory, members=members, filter="data")
     archive.unlink()
-    status.unlink(missing_ok=True)
+    report("complete")
 elif action == "fail":
     archive.unlink(missing_ok=True)
     report("failed")

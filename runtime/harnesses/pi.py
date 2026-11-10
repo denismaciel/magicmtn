@@ -1,5 +1,6 @@
 """Pi 1.2 adapter; no agent loop is implemented by MagicMtn."""
 import json
+import hashlib
 import os
 import pathlib
 
@@ -28,10 +29,25 @@ class PiHarness:
             (extension / "index.js").write_text(pathlib.Path(__file__).resolve().parents[1].joinpath("mcp.js").read_text())
             (extension / "package.json").write_text('{"type":"module"}')
 
-    def command(self):
+    def command(self, cwd=None):
         files = list(self.sessions.glob("*.jsonl"))
         if len(files) > 1:
             raise RuntimeError("ambiguous Pi session files; operator recovery required")
+        if files and cwd:
+            # Pi restores cwd from the session header. Preserve every transcript
+            # entry while moving the resumed session to the relay destination.
+            header, separator, transcript = files[0].read_text().partition("\n")
+            metadata = json.loads(header)
+            if metadata["cwd"] != cwd:
+                metadata["cwd"] = cwd
+                temporary = files[0].with_suffix(".tmp")
+                temporary.write_text(json.dumps(metadata) + separator + transcript)
+                # Upload offsets are append-only and keyed by filename. Give
+                # the rewritten header a new artifact identity.
+                resumed = files[0].with_name(hashlib.sha256(cwd.encode()).hexdigest() + ".jsonl")
+                temporary.replace(resumed)
+                files[0].unlink()
+                files = [resumed]
         selector = ["--session", str(files[0])] if files else ["--session-id", self.id, "--session-dir", str(self.sessions)]
         return ["pi", *selector, "--provider", "magicmtn", "--model", self.config["model"]["id"]]
 
