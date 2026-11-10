@@ -240,7 +240,7 @@ class SupervisorTests(unittest.TestCase):
             self.config["model"].update(api="openai-completions", provider="original-selected-provider", baseUrl="https://original-selected-upstream.invalid/v1")
         self.supervisor.configure()
         command = self.supervisor.harness.command
-        self.supervisor.harness.command = lambda: [os.environ["MAGICMTN_TEST_PI"], *command()[1:], "--offline", "--no-context-files", "--no-extensions"]
+        self.supervisor.harness.command = lambda cwd=None: [os.environ["MAGICMTN_TEST_PI"], *command(cwd)[1:], "--offline", "--no-context-files", "--no-extensions"]
         # Retain adapter command refresh on explicit restart.
         self.supervisor.command = ["pi"]
         self.supervisor.request = agent.Supervisor.request.__get__(self.supervisor)
