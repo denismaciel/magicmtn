@@ -64,10 +64,7 @@ pub(super) fn start(api: &Api, id: Uuid, directory: &Path) -> Result<()> {
     std::thread::spawn(move || {
         let _ = child.wait();
     });
-    eprintln!(
-        "Copying tracked local files and repository metadata in the background. Transfer log: {}",
-        log_path.display()
-    );
+    eprintln!("Copying your repo... Transfer log: {}", log_path.display());
     Ok(())
 }
 
@@ -175,10 +172,15 @@ fn archive(directory: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn remote(api: &Api, id: Uuid, action: &str, name: &str) -> Result<()> {
+async fn remote(api: &Api, id: Uuid, action: &str, name: &str, repository: &str) -> Result<()> {
     let body = crate::execution::request(
         include_str!("relay.py"),
-        &[id.to_string(), action.to_owned(), name.to_owned()],
+        &[
+            id.to_string(),
+            action.to_owned(),
+            name.to_owned(),
+            repository.to_owned(),
+        ],
         30_000,
     )?;
     let result: ExecResult = serde_json::from_value(
@@ -194,21 +196,26 @@ async fn remote(api: &Api, id: Uuid, action: &str, name: &str) -> Result<()> {
 }
 
 pub(super) async fn run(api: &Api, id: Uuid, directory: &Path) -> Result<()> {
+    let root = repository_root(directory)?;
+    let repository = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .context("repository directory name must be valid UTF-8")?;
     // Workspace IDs are sandbox IDs, as used by the extension's sandbox picker.
     let name = format!(".magic-relay-{}.tar.gz", Uuid::new_v4());
-    remote(api, id, "begin", &name).await?;
+    remote(api, id, "begin", &name, repository).await?;
     let result = async {
         let temporary = tempfile::tempdir()?;
         let path = temporary.path().join(&name);
-        archive(directory, &path)?;
+        archive(&root, &path)?;
         // Share the transport used by `magic sandbox scp`.
         crate::sandbox_scp::run(api, &id.to_string(), &path).await?;
-        remote(api, id, "extract", &name).await
+        remote(api, id, "extract", &name, repository).await
     }
     .await;
     if result.is_err() {
         // Retain a visible failure in Pi instead of silently clearing the notice.
-        let _ = remote(api, id, "fail", &name).await;
+        let _ = remote(api, id, "fail", &name, repository).await;
     }
     result
 }

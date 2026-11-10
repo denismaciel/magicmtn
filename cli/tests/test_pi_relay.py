@@ -65,13 +65,25 @@ class RelayTest(unittest.TestCase):
     def test_relay_preserves_a_colocated_jujutsu_repository(self):
         self.run_relay(False, subdirectory=True, jujutsu=True)
 
-    def run_relay(self, fail_transfer, *, subdirectory=False, jujutsu=False):
+    def test_relay_preserves_a_repository_name_with_spaces(self):
+        self.run_relay(False, subdirectory=True, repository="agent examples")
+
+    def test_relay_does_not_merge_into_an_existing_repository(self):
+        self.run_relay(False, existing=True)
+
+    def run_relay(self, fail_transfer, *, subdirectory=False, jujutsu=False,
+                  repository="agent-examples", existing=False):
         binary = str(pathlib.Path(os.environ["MAGICMTN_TEST_MAGIC"]).resolve())
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
-            local, guest, home = (root / name for name in ("local", "guest", "home"))
+            local, guest, home = (root / name for name in (repository, "guest", "home"))
             for directory in (local, guest, home):
                 directory.mkdir()
+            destination = guest / local.name
+            (guest / "workspace-note").write_text("keep workspace files")
+            if existing:
+                destination.mkdir()
+                (destination / "original").write_text("keep existing repository")
             subprocess.run(["git", "init", "-q", str(local)], check=True)
             (local / "sub").mkdir()
             (local / "sub/nested").write_text("nested contents")
@@ -83,6 +95,8 @@ class RelayTest(unittest.TestCase):
             subprocess.run(["git", "-C", str(local), "checkout", "-qb", "relay-branch"], check=True)
             if jujutsu:
                 subprocess.run(["jj", "git", "init", "--colocate", str(local)], check=True, capture_output=True)
+                subprocess.run(["jj", "bookmark", "create", "relay-bookmark", "-r", "@"],
+                               cwd=local, check=True, capture_output=True)
             else:
                 (local / ".jj/repo/store").mkdir(parents=True)
                 (local / ".jj/repo/store/type").write_text("git")
@@ -124,44 +138,54 @@ class RelayTest(unittest.TestCase):
                 self.assertIn(b"remote terminal ready", output)
                 self.assertTrue(server.upload_started.is_set(), output.decode(errors="replace"))
                 self.assertEqual(json.loads(status.read_text())["state"], "copying")
-                self.assertFalse((guest / "tracked").exists())
+                self.assertFalse((destination / "tracked").exists())
+                self.assertEqual(json.loads(status.read_text())["directory"], str(destination.resolve()))
                 # Detach while the SCP write is still blocked on the fixture.
                 os.write(master, b"\x1d")
                 self.assertEqual(process.wait(timeout=3), 0)
                 server.allow_upload.set()
                 deadline = time.monotonic() + 10
                 while time.monotonic() < deadline:
-                    if fail_transfer:
+                    if fail_transfer or existing:
                         if status.exists() and json.loads(status.read_text())["state"] == "failed":
                             break
                     elif status.exists() and json.loads(status.read_text())["state"] == "complete":
                         break
                     time.sleep(0.05)
-                if fail_transfer:
+                if fail_transfer or existing:
                     self.assertEqual(json.loads(status.read_text())["state"], "failed")
-                    self.assertEqual(list(guest.iterdir()), [])
+                    expected = {"workspace-note", repository} if existing else {"workspace-note"}
+                    self.assertEqual({entry.name for entry in guest.iterdir()}, expected)
+                    if existing:
+                        self.assertEqual({entry.name for entry in destination.iterdir()}, {"original"})
+                        self.assertEqual((destination / "original").read_text(), "keep existing repository")
                 else:
-                    self.assertEqual((guest / "tracked").read_text(), "current modified contents")
-                    self.assertEqual((guest / "sub/nested").read_text(), "modified nested contents")
-                    self.assertFalse((guest / "deleted").exists())
-                    self.assertEqual({entry.name for entry in guest.iterdir()}, {"tracked", "sub", ".git", ".jj"})
-                    self.assertEqual((guest / ".jj/repo/store/type").read_text(), "git")
+                    self.assertEqual((destination / "tracked").read_text(), "current modified contents")
+                    self.assertEqual((destination / "sub/nested").read_text(), "modified nested contents")
+                    self.assertFalse((destination / "deleted").exists())
+                    self.assertEqual({entry.name for entry in guest.iterdir()}, {"workspace-note", repository})
+                    self.assertEqual({entry.name for entry in destination.iterdir()}, {"tracked", "sub", ".git", ".jj"})
+                    self.assertEqual((destination / ".jj/repo/store/type").read_text(), "git")
                     for args in (["diff"], ["diff", "--cached"], ["rev-parse", "HEAD"],
                                  ["branch", "--show-current"], ["ls-files", "--stage"]):
                         self.assertEqual(
-                            subprocess.check_output(["git", "-C", str(guest), *args]),
+                            subprocess.check_output(["git", "-C", str(destination), *args]),
                             subprocess.check_output(["git", "-C", str(local), *args]),
                             args,
                         )
                     for path in (local / ".jj").rglob("*"):
                         if path.is_file():
-                            self.assertEqual((guest / path.relative_to(local)).read_bytes(), path.read_bytes())
+                            self.assertEqual((destination / path.relative_to(local)).read_bytes(), path.read_bytes())
                     if jujutsu:
                         args = ["jj", "--ignore-working-copy", "--no-pager", "log", "-r", "@",
                                 "--no-graph", "-T", "commit_id"]
-                        self.assertEqual(subprocess.check_output(args, cwd=guest),
+                        self.assertEqual(subprocess.check_output(args, cwd=destination),
                                          subprocess.check_output(args, cwd=local))
-                    self.assertEqual(json.loads(status.read_text()), {"state": "complete", "directory": str(guest.resolve())})
+                        args = ["jj", "--ignore-working-copy", "--no-pager", "bookmark", "list"]
+                        self.assertEqual(subprocess.check_output(args, cwd=destination),
+                                         subprocess.check_output(args, cwd=local))
+                    self.assertEqual(json.loads(status.read_text()), {"state": "complete", "directory": str(destination.resolve())})
+                self.assertEqual((guest / "workspace-note").read_text(), "keep workspace files")
                 self.assertTrue(server.exec_bodies)
             finally:
                 server.allow_upload.set()

@@ -112,7 +112,7 @@ export default function workspaceStatus(pi) {
       }
       if (state === previous) return;
       previous = state;
-      const message = state === "copying" ? "Copying your local files in the background…"
+      const message = state === "copying" ? "Copying your repo..."
         : state === "failed" ? "Local file copy failed. Check the transfer log on your local machine." : undefined;
       ctx.ui.setWidget("magicmtn-relay", message
         ? (_tui, theme) => new Text(theme.fg("dim", message), 0, 0) : undefined);

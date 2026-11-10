@@ -4,14 +4,18 @@ import os
 from pathlib import Path
 import sys
 import tarfile
+import tempfile
 
 
-identity, action, name = sys.argv[1:]
+identity, action, name, repository = sys.argv[1:]
+if repository in ("", ".", "..") or Path(repository).name != repository:
+    raise ValueError("invalid repository directory name")
 status = Path("/tmp") / f"magicmtn-relay-{identity}.json"
-directory = Path.cwd()
-if directory in (Path("/"), Path.home()) and Path("/workspace").is_dir():
-    directory = Path("/workspace")
-archive = directory / name
+workspace = Path.cwd()
+if workspace in (Path("/"), Path.home()) and Path("/workspace").is_dir():
+    workspace = Path("/workspace")
+archive = workspace / name
+directory = workspace / repository
 
 
 def report(state):
@@ -23,13 +27,19 @@ def report(state):
 if action == "begin":
     report("copying")
 elif action == "extract":
+    if os.path.lexists(directory):
+        raise FileExistsError(f"repository destination already exists: {directory}")
     # The data filter prevents traversal and links escaping the destination.
-    # Validate the whole archive before writing any of its contents.
-    with tarfile.open(archive, "r:gz") as source:
-        members = source.getmembers()
-        for member in members:
-            tarfile.data_filter(member, str(directory))
-        source.extractall(directory, members=members, filter="data")
+    # Publish the repository only after all files and metadata are extracted.
+    with tempfile.TemporaryDirectory(prefix=".magic-relay-", dir=workspace) as temporary:
+        staged = Path(temporary) / repository
+        staged.mkdir()
+        with tarfile.open(archive, "r:gz") as source:
+            members = source.getmembers()
+            for member in members:
+                tarfile.data_filter(member, str(staged))
+            source.extractall(staged, members=members, filter="data")
+        staged.rename(directory)
     archive.unlink()
     report("complete")
 elif action == "fail":

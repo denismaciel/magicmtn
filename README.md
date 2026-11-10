@@ -34,11 +34,12 @@ magic agents install pi
 ```
 
 In Pi, `/magic new` starts a workspace using your saved defaults. Use
-`/magic relay` from a Git working tree to start a workspace and copy the current
-tracked files in the background using sandbox SCP. The copy includes staged and
-unstaged changes and the `.git` and `.jj` metadata directories within the current
-directory; it excludes untracked files, deleted files, and submodule contents.
-Pi opens without waiting for the upload and
+`/magic relay` from a Git working tree to start a workspace and copy the repository
+into `/workspace/<repo-name>` in the background using sandbox SCP, including when
+invoked from a subdirectory. The copy preserves branches, staged and unstaged
+changes, local deletions, and the repository's `.git` and `.jj` metadata; it excludes
+untracked files and submodule contents. Pi resumes in the copied repository when
+the transfer completes. Pi opens without waiting for the upload and
 shows a temporary copying notice until the files arrive. Transfer failures stay
 visible in Pi, with details in the local transfer log printed during connection.
 

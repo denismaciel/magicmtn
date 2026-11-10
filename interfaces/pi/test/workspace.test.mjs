@@ -369,7 +369,7 @@ test("relay notice appears during copying, survives interaction, and disappears 
   assert.equal(f.widgets.has("magicmtn-relay"), false);
   writeFileSync(status, JSON.stringify({ state: "copying" }));
   t.mock.timers.tick(1000);
-  assert.match(f.widgets.get("magicmtn-relay").render(80).join(""), /Copying your local files in the background/);
+  assert.match(f.widgets.get("magicmtn-relay").render(80).join(""), /Copying your repo\.\.\./);
   f.send("x");
   assert.equal(f.widgets.has("magicmtn-relay"), true);
   rmSync(status);
