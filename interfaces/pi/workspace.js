@@ -2,20 +2,20 @@
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Text, renderFakeCursor, stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-const LOGO = `                           ░██████░
-                           ░██████░
-                           ░██████░
+const LOGO = `                           ⣿⣿⣿⣿⣿⣿⣿⣿
+                           ⣿⣿⣿⣿⣿⣿⣿⣿
+                           ⣿⣿⣿⣿⣿⣿⣿⣿
 
-                  ░██████░ ░██████░
-                  ░██████░ ░██████░
-                  ░██████░ ░██████░
+                  ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
+                  ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
+                  ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
 
-░██████░ ░██████░ ░██████░ ░██████░
-░██████░ ░██████░ ░██████░ ░██████░
-░██████░ ░██████░ ░██████░ ░██████░`;
+⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿
+⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿`;
 
 const WELCOME = "Atop the MagicMtn sandbox, do your most ambitious work";
-const COMPACT_LOGO = "      █\n    █ █\n█ █ █ █";
+const COMPACT_LOGO = "      ⣿\n    ⣿ ⣿\n⣿ ⣿ ⣿ ⣿";
 const SPARKLE_FRAMES = ["", ".", "+", "*", "+", ".", "", "", "", "", "", ""];
 const SPARKLE_POSITIONS = [[1, 30], [5, 21], [9, 4], [9, 31], [5, 31]];
 const COMPACT_SPARKLE_POSITIONS = [[0, 6], [1, 4], [2, 0], [2, 6], [1, 6]];
@@ -106,7 +106,10 @@ export default function workspaceStatus(pi) {
             logo[row] = logo[row].slice(0, column) + theme.fg("accent", sparkle) + logo[row].slice(column + 1);
           }
           const logoPadding = " ".repeat(Math.max(0, Math.floor((width - (full ? 35 : 7)) / 2)));
-          const content = [...logo.map((line) => logoPadding + truncateToWidth(line, width - logoPadding, "")), "", ...welcome];
+          // Braille cells provide fine dots; faint theme color softens the mark on any background.
+          const artwork = logo.map((line) => logoPadding
+            + `\x1b[2m${theme.fg("dim", truncateToWidth(line, width - logoPadding, ""))}\x1b[22m`);
+          const content = [...artwork, "", ...welcome];
           if (height < tips.length + 1 + content.length) tips = [];
           const heading = tips.length ? [...tips, ""] : [];
           const space = Math.max(0, height - heading.length - content.length);

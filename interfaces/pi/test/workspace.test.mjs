@@ -79,19 +79,23 @@ function fixture(t, { mode = "tui", sandbox = true, rows = 40, initialText = "",
     send: (data) => tui.handleTerminalInput(data) };
 }
 
-test("sandbox welcome renders the full approved logo and copy above the editor", (t) => {
+test("sandbox welcome renders the faint dotted logo and copy above the editor", (t) => {
   const f = fixture(t);
   const widget = f.widgets.get("magicmtn-welcome");
-  const lines = widget.render(80).map((line) => line.trimEnd());
-  assert.deepEqual(lines.filter((line) => line.includes("░")), [
-    ...Array(3).fill(" ".repeat(49) + "░██████░"),
-    ...Array(3).fill(" ".repeat(40) + "░██████░ ░██████░"),
-    ...Array(3).fill(" ".repeat(22) + "░██████░ ░██████░ ░██████░ ░██████░"),
+  const renderedLines = widget.render(80);
+  for (const line of renderedLines.filter((line) => line.includes("⣿"))) {
+    assert.match(line, /\x1b\[2m\x1b\[90m.*⣿.*\x1b\[39m\x1b\[22m$/);
+  }
+  const lines = renderedLines.map(stripTerminalSequences).map((line) => line.trimEnd());
+  assert.deepEqual(lines.filter((line) => line.includes("⣿")), [
+    ...Array(3).fill(" ".repeat(49) + "⣿⣿⣿⣿⣿⣿⣿⣿"),
+    ...Array(3).fill(" ".repeat(40) + "⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿"),
+    ...Array(3).fill(" ".repeat(22) + "⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿"),
   ]);
   for (const width of [40, 80, 120]) {
-    const rendered = widget.render(width);
-    const base = rendered.find((line) => line.trim() === "░██████░ ░██████░ ░██████░ ░██████░");
-    const copy = rendered.slice(rendered.findLastIndex((line) => line.includes("░")) + 1)
+    const rendered = widget.render(width).map(stripTerminalSequences);
+    const base = rendered.find((line) => line.trim() === "⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿ ⣿⣿⣿⣿⣿⣿⣿⣿");
+    const copy = rendered.slice(rendered.findLastIndex((line) => line.includes("⣿")) + 1)
       .filter((line) => line.trim());
     assert.equal(copy.map((line) => line.trim()).join(" "), "MagicMtn");
     assert.doesNotMatch(rendered.join("\n"), /Atop the MagicMtn sandbox/);
@@ -102,7 +106,7 @@ test("sandbox welcome renders the full approved logo and copy above the editor",
       assert.ok(Math.abs(left - right) <= 1, `center ${line.trim()} at width ${width}`);
     }
   }
-  assert.ok(lines[0].includes("\x1b[36mTip:\x1b[39m"));
+  assert.ok(renderedLines[0].includes("\x1b[36mTip:\x1b[39m"));
   assert.match(stripTerminalSequences(lines.join("\n")), /Tip: Integrate with your GitHub repos and add MCPs to power your agents at\s+https:\/\/control\.magicmtn\.ai\//);
   assert.doesNotMatch(lines.join("\n"), /REMOTE SANDBOX|widget truncated/);
   for (const width of [20, 40, 80]) {
@@ -115,7 +119,7 @@ test("short terminals use a compact mountain and retain the editor", (t) => {
   const lines = f.widgets.get("magicmtn-welcome").render(80);
   assert.match(stripTerminalSequences(lines[0]), /^   Tip:/);
   assert.ok(lines.length <= 16);
-  assert.equal(lines.join("\n").match(/█/g).length, 7);
+  assert.equal(lines.join("\n").match(/⣿/g).length, 7);
   assert.equal(f.tui.render(80).length, 24);
   assert.match(lines.join("\n"), /https:\/\/control\.magicmtn\.ai\//);
 });
@@ -129,8 +133,8 @@ for (const nested of [false, true]) {
       assert.equal(lines[8], "[Extensions]");
       assert.match(lines[11], /^   Tip:/);
       const bodyStart = lines.findIndex((line, index) => index > 11 && !line.trim()) + 1;
-      const first = lines.findIndex((line) => line.includes("░"));
-      const last = lines.findLastIndex((line) => line.includes("░"));
+      const first = lines.findIndex((line) => line.includes("⣿"));
+      const last = lines.findLastIndex((line) => line.includes("⣿"));
       const bodyEnd = lines.length - f.editor().render(width).length - 3;
       assert.ok(Math.abs((first - bodyStart) - (bodyEnd - last - 1)) <= 1);
       const base = lines[last].trimEnd();
@@ -153,7 +157,7 @@ test("sparkles pulse one at a time at different positions and loop", (t) => {
   const f = fixture(t);
   const frames = [];
   for (let frame = 0; frame <= 61; frame++) {
-    const logo = f.widgets.get("magicmtn-welcome").render(80).filter((line) => /[░█]/.test(line)).map(stripTerminalSequences);
+    const logo = f.widgets.get("magicmtn-welcome").render(80).filter((line) => /⣿/.test(line)).map(stripTerminalSequences);
     assert.ok((logo.join("\n").match(/[.*+]/g) || []).length <= 1);
     frames.push(logo.join("\n"));
     t.mock.timers.tick(180);
@@ -201,7 +205,7 @@ for (const [name, data] of [
     assert.ok(before.length > after.length);
     assert.equal(after.length, 1);
     const remaining = after.join("\n");
-    assert.doesNotMatch(remaining, /░|Tip:|GitHub|MCPs|control\.magicmtn\.ai/);
+    assert.doesNotMatch(remaining, /⣿|Tip:|GitHub|MCPs|control\.magicmtn\.ai/);
     assert.ok(after.some((line) => line.trim() === "MagicMtn"));
     assert.doesNotMatch(f.editor().render(80).join("\n"), /Atop the MagicMtn sandbox/);
     assert.equal(f.subscriptions(), 0);
@@ -210,7 +214,7 @@ for (const [name, data] of [
     f.send("next");
     assert.deepEqual(f.input, [data, "next"]);
     f.emit("model_select");
-    assert.doesNotMatch(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /░|Tip:|control\.magicmtn\.ai/);
+    assert.doesNotMatch(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /⣿|Tip:|control\.magicmtn\.ai/);
     f.emit("session_shutdown");
     assert.equal(f.widgets.size, 0);
     assert.equal(f.subscriptions(), 0);
@@ -221,7 +225,7 @@ test("starting the agent dismisses the tip without requiring terminal input", (t
   const f = fixture(t);
   f.emit("agent_start");
   const rendered = f.widgets.get("magicmtn-welcome").render(80).join("\n");
-  assert.doesNotMatch(rendered, /░|Tip:|GitHub|MCPs|control\.magicmtn\.ai/);
+  assert.doesNotMatch(rendered, /⣿|Tip:|GitHub|MCPs|control\.magicmtn\.ai/);
   assert.match(rendered, /MagicMtn/);
   assert.equal(f.subscriptions(), 0);
   assert.deepEqual(f.input, []);
@@ -244,7 +248,7 @@ test("terminal reports and focus changes leave the welcome visible", (t) => {
     assert.match(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /Tip:/);
   }
   f.send("x");
-  assert.doesNotMatch(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /░/);
+  assert.doesNotMatch(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /⣿/);
 });
 
 test("dim input placeholder is visual only, retains the cursor, and fits narrow terminals", (t) => {
