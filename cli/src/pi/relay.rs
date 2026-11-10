@@ -1,4 +1,4 @@
-//! Copies the tracked working tree independently of the interactive attachment.
+//! Copies the tracked working tree and repository metadata independently of attachment.
 use crate::Api;
 use anyhow::{ensure, Context, Result};
 use flate2::write::GzEncoder;
@@ -50,7 +50,7 @@ pub(super) fn start(api: &Api, id: Uuid, directory: &Path) -> Result<()> {
         let _ = child.wait();
     });
     eprintln!(
-        "Copying tracked local files in the background. Transfer log: {}",
+        "Copying tracked local files and repository metadata in the background. Transfer log: {}",
         log_path.display()
     );
     Ok(())
@@ -142,6 +142,19 @@ fn archive(directory: &Path, destination: &Path) -> Result<()> {
             name.display()
         );
         archive.append_path_with_name(&source, &name)?;
+    }
+    for name in [".git", ".jj"] {
+        let source = directory.join(name);
+        let metadata = match fs::symlink_metadata(&source) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.is_dir() {
+            archive.append_dir_all(name, &source)?;
+        } else {
+            archive.append_path_with_name(&source, name)?;
+        }
     }
     archive.into_inner()?.finish()?;
     Ok(())
@@ -272,6 +285,52 @@ mod tests {
             ]
             .into()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn archive_preserves_repository_metadata() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        git(directory.path(), &["init", "-q"])?;
+        fs::write(directory.path().join("tracked"), "committed")?;
+        git(directory.path(), &["add", "."])?;
+        git(
+            directory.path(),
+            &[
+                "-c",
+                "user.name=Relay Test",
+                "-c",
+                "user.email=relay@example.com",
+                "commit",
+                "-qm",
+                "initial",
+            ],
+        )?;
+        fs::write(directory.path().join("tracked"), "modified")?;
+        fs::create_dir_all(directory.path().join(".jj/repo/store"))?;
+        fs::create_dir_all(directory.path().join(".jj/working_copy"))?;
+        let state = [0, 255, 1, 128];
+        fs::write(directory.path().join(".jj/repo/store/state"), state)?;
+        fs::write(directory.path().join("untracked"), "excluded")?;
+        let output = tempfile::NamedTempFile::new()?;
+        archive(directory.path(), output.path())?;
+        let extracted = tempfile::tempdir()?;
+        tar::Archive::new(GzDecoder::new(fs::File::open(output.path())?))
+            .unpack(extracted.path())?;
+        assert_eq!(
+            git(extracted.path(), &["show", "HEAD:tracked"])?,
+            b"committed"
+        );
+        assert_eq!(
+            git(extracted.path(), &["diff", "--", "tracked"])?,
+            git(directory.path(), &["diff", "--", "tracked"])?
+        );
+        assert_eq!(
+            fs::read(extracted.path().join(".jj/repo/store/state"))?,
+            state
+        );
+        assert!(extracted.path().join(".jj/working_copy").is_dir());
+        assert!(!extracted.path().join("untracked").exists());
         Ok(())
     }
 

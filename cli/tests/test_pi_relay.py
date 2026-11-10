@@ -67,6 +67,8 @@ class RelayTest(unittest.TestCase):
             subprocess.run(["git", "init", "-q", str(local)], check=True)
             (local / "tracked").write_text("staged contents")
             subprocess.run(["git", "-C", str(local), "add", "."], check=True)
+            (local / ".jj/repo/store").mkdir(parents=True)
+            (local / ".jj/repo/store/type").write_text("git")
             (local / "tracked").write_text("current modified contents")
             (local / "untracked").write_text("do not upload")
             identity = str(uuid.uuid4())
@@ -118,7 +120,12 @@ class RelayTest(unittest.TestCase):
                     self.assertEqual(list(guest.iterdir()), [])
                 else:
                     self.assertEqual((guest / "tracked").read_text(), "current modified contents")
-                    self.assertEqual([entry.name for entry in guest.iterdir()], ["tracked"])
+                    self.assertEqual({entry.name for entry in guest.iterdir()}, {"tracked", ".git", ".jj"})
+                    self.assertEqual((guest / ".jj/repo/store/type").read_text(), "git")
+                    self.assertEqual(
+                        subprocess.check_output(["git", "-C", str(guest), "diff", "--", "tracked"]),
+                        subprocess.check_output(["git", "-C", str(local), "diff", "--", "tracked"]),
+                    )
                     self.assertEqual(json.loads(status.read_text()), {"state": "complete", "directory": str(guest.resolve())})
                 self.assertTrue(server.exec_bodies)
             finally:
