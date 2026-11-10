@@ -1,4 +1,6 @@
 // Loaded inside the sandbox. Only public workspace metadata is passed here.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Text, renderFakeCursor, stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
@@ -29,6 +31,30 @@ export default function workspaceStatus(pi) {
   if (!raw) return;
   const workspace = JSON.parse(raw);
   let cleanupWelcome;
+  let relayTimer;
+  let cleanupRelay;
+  const watchRelay = (ctx) => {
+    cleanupRelay?.();
+    const statusPath = join("/tmp", `magicmtn-relay-${workspace.id}.json`);
+    let previous;
+    const refresh = () => {
+      let state;
+      try { state = JSON.parse(readFileSync(statusPath, "utf8")).state; } catch { /* No active relay. */ }
+      if (state === previous) return;
+      previous = state;
+      const message = state === "copying" ? "Copying your local files in the background…"
+        : state === "failed" ? "Local file copy failed. Check the transfer log on your local machine." : undefined;
+      ctx.ui.setWidget("magicmtn-relay", message
+        ? (_tui, theme) => new Text(theme.fg("dim", message), 0, 0) : undefined);
+    };
+    refresh();
+    relayTimer = setInterval(refresh, 1000);
+    relayTimer.unref?.();
+    cleanupRelay = () => {
+      clearInterval(relayTimer);
+      ctx.ui.setWidget("magicmtn-relay", undefined);
+    };
+  };
   let dismissWelcome;
   const update = (_event, ctx) => {
     const model = ctx.model;
@@ -41,6 +67,7 @@ export default function workspaceStatus(pi) {
     update(event, ctx);
     cleanupWelcome?.();
     if (ctx.mode !== "tui") return;
+    watchRelay(ctx);
     if (ctx.sessionManager.getBranch().some((entry) => entry.type === "message"
       && ["user", "assistant"].includes(entry.message.role))) return;
 
@@ -152,6 +179,6 @@ export default function workspaceStatus(pi) {
     animation.unref?.();
   });
   pi.on("agent_start", () => dismissWelcome?.());
-  pi.on("session_shutdown", () => cleanupWelcome?.());
+  pi.on("session_shutdown", () => { cleanupWelcome?.(); cleanupRelay?.(); });
   pi.on("model_select", update);
 }

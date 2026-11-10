@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { writeFileSync, rmSync } from "node:fs";
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import { Container, CURSOR_MARKER, KeybindingsManager, ScrollView, Spacer, TUI_KEYBINDINGS, TuiMainScreen, VStack, renderFakeCursor, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import workspaceStatus from "../workspace.js";
@@ -316,4 +317,33 @@ test("local Pi does not show a sandbox welcome", (t) => {
   assert.equal(f.widgets.size, 0);
   assert.equal(f.subscriptions(), 0);
   assert.equal(f.statuses.size, 0);
+});
+
+
+test("relay notice appears during copying, survives interaction, and disappears on completion", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
+  t.after(() => rmSync(status, { force: true }));
+  const f = fixture(t);
+  assert.equal(f.widgets.has("magicmtn-relay"), false);
+  writeFileSync(status, JSON.stringify({ state: "copying" }));
+  t.mock.timers.tick(1000);
+  assert.match(f.widgets.get("magicmtn-relay").render(80).join(""), /Copying your local files in the background/);
+  f.send("x");
+  assert.equal(f.widgets.has("magicmtn-relay"), true);
+  rmSync(status);
+  t.mock.timers.tick(1000);
+  assert.equal(f.widgets.has("magicmtn-relay"), false);
+});
+
+test("relay failure is visible on resumed sessions and polling stops on shutdown", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
+  t.after(() => rmSync(status, { force: true }));
+  writeFileSync(status, JSON.stringify({ state: "failed" }));
+  const f = fixture(t, { entries: [{ type: "message", message: { role: "user" } }] });
+  assert.match(f.widgets.get("magicmtn-relay").render(100).join(""), /file copy failed/);
+  f.emit("session_shutdown");
+  t.mock.timers.tick(2000);
+  assert.equal(f.widgets.has("magicmtn-relay"), false);
 });

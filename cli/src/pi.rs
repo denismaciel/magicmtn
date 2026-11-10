@@ -1,3 +1,4 @@
+mod relay;
 mod streaming;
 use crate::Api;
 use anyhow::{bail, ensure, Context, Result};
@@ -65,7 +66,15 @@ pub enum Commands {
     /// Explicitly restart the agent using its saved conversation
     Restart { id: Uuid },
     /// Connect your terminal to Pi inside a workspace; Ctrl+] disconnects
-    Attach { id: Uuid },
+    Attach {
+        id: Uuid,
+        /// Copy tracked working-tree files in a separate background process
+        #[arg(long)]
+        relay_from: Option<PathBuf>,
+    },
+    /// Background file transfer for the Pi extension
+    #[command(hide = true)]
+    Relay { id: Uuid, directory: PathBuf },
     /// Terminate a workspace and delete its sandbox using durable sandbox cleanup
     Terminate { id: Uuid },
     /// Issue a short-lived, model-scoped provider configuration for the pi extension
@@ -97,6 +106,7 @@ impl Commands {
             Self::Stop { .. } => "stop",
             Self::Restart { .. } => "restart",
             Self::Attach { .. } => "attach",
+            Self::Relay { .. } => "relay",
             Self::Terminate { .. } => "terminate",
             Self::Inference { .. } => "inference",
             Self::ReportError { .. } => "report",
@@ -233,7 +243,13 @@ pub async fn run(api: &Api, command: Commands) -> Result<()> {
             )
             .await?
         }
-        Commands::Attach { id } => return attach(api, id).await,
+        Commands::Attach { id, relay_from } => {
+            if let Some(directory) = relay_from {
+                relay::start(api, id, &directory)?;
+            }
+            return attach(api, id).await;
+        }
+        Commands::Relay { id, directory } => return relay::run(api, id, &directory).await,
         Commands::Terminate { id } => {
             api.request(
                 Method::POST,

@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import workspaceStatus from "../workspace.js";
 import { DefaultPicker } from "../picker.js";
@@ -195,6 +196,29 @@ test("creates the default workspace without selection menus and hands the termin
   assert.match(f.statuses.get("magicmtn-workspace"), /Local pi.*disconnected from MagicMtn sandbox d215125b/);
   assert.deepEqual(f.menus, []);
 });
+test("relay creates the default workspace and attaches with a background copy of ctx.cwd", async (t) => {
+  const f = await fixture(t);
+  const directory = mkdtempSync(join(tmpdir(), "magic-relay-git-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  assert.equal(spawnSync("git", ["init", "-q", directory]).status, 0);
+  f.ctx.cwd = directory;
+  await f.command.handler("relay", f.ctx);
+  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "create", "--model", model.id],
+    ["pi", "attach", workspace.id, "--relay-from", directory]]);
+  assert.deepEqual(f.terminalEvents, ["stop", "start"]);
+});
+
+test("relay rejects a non-repository before provisioning", async (t) => {
+  const f = await fixture(t);
+  const directory = mkdtempSync(join(tmpdir(), "magic-relay-nongit-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  f.ctx.cwd = directory;
+  await f.command.handler("relay", f.ctx);
+  assert.match(f.notices.at(-1).message, /requires the current directory to be in a Git repository/);
+  assert.deepEqual(f.terminalEvents, []);
+  assert.deepEqual(f.menus, []);
+});
+
 test("new workspace cannot provision without a MagicMtn model", async (t) => {
   const f = await fixture(t, { models: [] });
   f.choices.push(0);
