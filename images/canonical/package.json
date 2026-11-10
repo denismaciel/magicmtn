@@ -4,7 +4,7 @@
   "private": true,
   "description": "Pinned Pi installation for the canonical MagicMtn sandbox image",
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "1.5.0"
+    "@earendil-works/pi-coding-agent": "1.5.1"
   },
   "overrides": {
     "protobufjs": "7.6.6"
