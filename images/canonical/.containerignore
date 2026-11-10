@@ -13,3 +13,6 @@
 !runtime/install.sh
 !runtime/harnesses
 !runtime/harnesses/*.py
+**/node_modules
+**/__pycache__
+**/*.pyc
