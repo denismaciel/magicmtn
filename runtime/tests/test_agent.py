@@ -83,7 +83,9 @@ class SupervisorTests(unittest.TestCase):
     def test_completed_relay_resumes_in_destination_and_preserves_transcript(self):
         destination = pathlib.Path(self.directory.name).resolve() / "copied project"
         destination.mkdir()
-        status = pathlib.Path("/tmp") / f"magicmtn-relay-{self.supervisor.id}.json"
+        workspace = str(uuid.uuid4())
+        self.supervisor.config["workspace_info"] = {"id": workspace}
+        status = pathlib.Path("/tmp") / f"magicmtn-relay-{workspace}.json"
         self.addCleanup(lambda: status.unlink(missing_ok=True))
         self.supervisor.harness.sessions.mkdir()
         session = self.supervisor.harness.sessions / "session.jsonl"

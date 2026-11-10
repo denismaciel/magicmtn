@@ -131,7 +131,8 @@ class Supervisor:
 
     def relay_directory(self):
         try:
-            status = json.loads((pathlib.Path("/tmp") / f"magicmtn-relay-{self.id}.json").read_text())
+            workspace = self.config.get("workspace_info", {}).get("id", self.id)
+            status = json.loads((pathlib.Path("/tmp") / f"magicmtn-relay-{workspace}.json").read_text())
             directory = status.get("directory")
             if status.get("state") == "complete" and directory and pathlib.Path(directory).is_absolute() and pathlib.Path(directory).is_dir():
                 return directory
