@@ -23,12 +23,27 @@ fn git(directory: &Path, args: &[&str]) -> Result<Vec<u8>> {
     Ok(output.stdout)
 }
 
-pub(super) fn start(api: &Api, id: Uuid, directory: &Path) -> Result<()> {
+fn repository_root(directory: &Path) -> Result<PathBuf> {
     ensure!(
         git(directory, &["rev-parse", "--is-inside-work-tree"])? == b"true\n",
         "relay requires the current directory to be in a Git repository"
     );
-    let directory = directory.canonicalize()?;
+    let root = git(directory, &["rev-parse", "--show-toplevel"])?;
+    let root = root
+        .strip_suffix(b"\n")
+        .context("invalid Git repository root")?;
+    #[cfg(unix)]
+    let root = {
+        use std::os::unix::ffi::OsStrExt;
+        Path::new(std::ffi::OsStr::from_bytes(root))
+    };
+    #[cfg(not(unix))]
+    let root = Path::new(std::str::from_utf8(root)?);
+    root.canonicalize().context("resolving Git repository root")
+}
+
+pub(super) fn start(api: &Api, id: Uuid, directory: &Path) -> Result<()> {
+    let directory = repository_root(directory)?;
     let (log, log_path) = tempfile::Builder::new()
         .prefix("magic-relay-")
         .suffix(".log")
@@ -68,10 +83,10 @@ fn transfer_command(api: &Api, id: Uuid, directory: &Path) -> Result<Command> {
 }
 
 fn archive(directory: &Path, destination: &Path) -> Result<()> {
-    ensure!(
-        git(directory, &["rev-parse", "--is-inside-work-tree"])? == b"true\n",
-        "relay requires the current directory to be in a Git repository"
-    );
+    // Pi can run in any subdirectory. Keep paths relative to the repository root
+    // so the working tree and its Git/Jujutsu metadata remain together.
+    let root = repository_root(directory)?;
+    let directory = root.as_path();
     let files = git(
         directory,
         &["ls-files", "--cached", "--stage", "-z", "--", "."],
@@ -202,7 +217,6 @@ pub(super) async fn run(api: &Api, id: Uuid, directory: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use flate2::read::GzDecoder;
-    use std::io::Read;
 
     #[test]
     fn background_command_is_accepted_by_this_cli_build() -> Result<()> {
@@ -230,8 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn archive_copies_working_files_and_only_tracked_paths_in_the_current_directory() -> Result<()>
-    {
+    fn archive_copies_all_tracked_working_files_from_a_subdirectory() -> Result<()> {
         let directory = tempfile::tempdir()?;
         git(directory.path(), &["init", "-q"])?;
         fs::create_dir_all(directory.path().join("sub/deleted"))?;
@@ -268,23 +281,21 @@ mod tests {
         )?;
         let output = tempfile::NamedTempFile::new()?;
         archive(&directory.path().join("sub"), output.path())?;
-        let mut contents = std::collections::BTreeMap::new();
-        for entry in tar::Archive::new(GzDecoder::new(fs::File::open(output.path())?)).entries()? {
-            let mut entry = entry?;
-            let name = entry.path()?.into_owned();
-            let mut value = String::new();
-            entry.read_to_string(&mut value)?;
-            contents.insert(name, value);
+        let extracted = tempfile::tempdir()?;
+        tar::Archive::new(GzDecoder::new(fs::File::open(output.path())?))
+            .unpack(extracted.path())?;
+        for (name, contents) in [
+            ("outside", "outside"),
+            ("sub/modified", "unstaged change"),
+            ("sub/staged", "working copy after staging"),
+            ("sub/line\nbreak 雪", "odd filename"),
+        ] {
+            assert_eq!(fs::read_to_string(extracted.path().join(name))?, contents);
         }
-        assert_eq!(
-            contents,
-            [
-                (PathBuf::from("modified"), "unstaged change".into()),
-                (PathBuf::from("staged"), "working copy after staging".into()),
-                (PathBuf::from("line\nbreak 雪"), "odd filename".into()),
-            ]
-            .into()
-        );
+        assert!(extracted.path().join(".git/index").is_file());
+        for name in ["sub/deleted", "sub/untracked", "sub/module"] {
+            assert!(!extracted.path().join(name).exists());
+        }
         Ok(())
     }
 
@@ -306,6 +317,9 @@ mod tests {
                 "initial",
             ],
         )?;
+        git(directory.path(), &["checkout", "-qb", "relay-branch"])?;
+        fs::write(directory.path().join("tracked"), "staged")?;
+        git(directory.path(), &["add", "tracked"])?;
         fs::write(directory.path().join("tracked"), "modified")?;
         fs::create_dir_all(directory.path().join(".jj/repo/store"))?;
         fs::create_dir_all(directory.path().join(".jj/working_copy"))?;
@@ -313,7 +327,8 @@ mod tests {
         fs::write(directory.path().join(".jj/repo/store/state"), state)?;
         fs::write(directory.path().join("untracked"), "excluded")?;
         let output = tempfile::NamedTempFile::new()?;
-        archive(directory.path(), output.path())?;
+        fs::create_dir(directory.path().join("sub"))?;
+        archive(&directory.path().join("sub"), output.path())?;
         let extracted = tempfile::tempdir()?;
         tar::Archive::new(GzDecoder::new(fs::File::open(output.path())?))
             .unpack(extracted.path())?;
@@ -324,6 +339,14 @@ mod tests {
         assert_eq!(
             git(extracted.path(), &["diff", "--", "tracked"])?,
             git(directory.path(), &["diff", "--", "tracked"])?
+        );
+        assert_eq!(
+            git(extracted.path(), &["diff", "--cached"])?,
+            git(directory.path(), &["diff", "--cached"])?
+        );
+        assert_eq!(
+            git(extracted.path(), &["branch", "--show-current"])?,
+            b"relay-branch\n"
         );
         assert_eq!(
             fs::read(extracted.path().join(".jj/repo/store/state"))?,

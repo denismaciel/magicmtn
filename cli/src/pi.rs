@@ -68,7 +68,7 @@ pub enum Commands {
     /// Connect your terminal to Pi inside a workspace; Ctrl+] disconnects
     Attach {
         id: Uuid,
-        /// Copy tracked working-tree files in a separate background process
+        /// Copy all tracked working-tree files and repository metadata in the background
         #[arg(long)]
         relay_from: Option<PathBuf>,
     },

@@ -7,6 +7,7 @@ import os
 import pathlib
 import pty
 import select
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -57,7 +58,14 @@ class RelayTest(unittest.TestCase):
     def test_upload_failure_is_visible_and_partial_data_is_cleaned(self):
         self.run_relay(True)
 
-    def run_relay(self, fail_transfer):
+    def test_relay_from_subdirectory_preserves_the_entire_repository(self):
+        self.run_relay(False, subdirectory=True)
+
+    @unittest.skipUnless(shutil.which("jj"), "requires jj")
+    def test_relay_preserves_a_colocated_jujutsu_repository(self):
+        self.run_relay(False, subdirectory=True, jujutsu=True)
+
+    def run_relay(self, fail_transfer, *, subdirectory=False, jujutsu=False):
         binary = str(pathlib.Path(os.environ["MAGICMTN_TEST_MAGIC"]).resolve())
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
@@ -65,12 +73,26 @@ class RelayTest(unittest.TestCase):
             for directory in (local, guest, home):
                 directory.mkdir()
             subprocess.run(["git", "init", "-q", str(local)], check=True)
-            (local / "tracked").write_text("staged contents")
+            (local / "sub").mkdir()
+            (local / "sub/nested").write_text("nested contents")
+            (local / "tracked").write_text("committed contents")
+            (local / "deleted").write_text("deleted locally")
             subprocess.run(["git", "-C", str(local), "add", "."], check=True)
-            (local / ".jj/repo/store").mkdir(parents=True)
-            (local / ".jj/repo/store/type").write_text("git")
+            subprocess.run(["git", "-C", str(local), "-c", "user.name=Relay Test",
+                            "-c", "user.email=relay@example.com", "commit", "-qm", "initial"], check=True)
+            subprocess.run(["git", "-C", str(local), "checkout", "-qb", "relay-branch"], check=True)
+            if jujutsu:
+                subprocess.run(["jj", "git", "init", "--colocate", str(local)], check=True, capture_output=True)
+            else:
+                (local / ".jj/repo/store").mkdir(parents=True)
+                (local / ".jj/repo/store/type").write_text("git")
+            (local / "tracked").write_text("staged contents")
+            subprocess.run(["git", "-C", str(local), "add", "tracked"], check=True)
             (local / "tracked").write_text("current modified contents")
+            (local / "sub/nested").write_text("modified nested contents")
+            (local / "deleted").unlink()
             (local / "untracked").write_text("do not upload")
+            source = local / "sub" if subdirectory else local
             identity = str(uuid.uuid4())
             status = pathlib.Path("/tmp") / f"magicmtn-relay-{identity}.json"
             server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), RelayHandler)
@@ -88,7 +110,7 @@ class RelayTest(unittest.TestCase):
                 json.dumps({"server": origin, "token": "test-cli-session"}))
             master, slave = pty.openpty()
             process = subprocess.Popen([binary, "--server-url", origin, "pi", "attach", identity,
-                                        "--relay-from", str(local)], stdin=slave, stdout=slave,
+                                        "--relay-from", str(source)], stdin=slave, stdout=slave,
                                        stderr=slave, env=dict(os.environ, HOME=str(home)))
             output = bytearray()
             try:
@@ -120,12 +142,25 @@ class RelayTest(unittest.TestCase):
                     self.assertEqual(list(guest.iterdir()), [])
                 else:
                     self.assertEqual((guest / "tracked").read_text(), "current modified contents")
-                    self.assertEqual({entry.name for entry in guest.iterdir()}, {"tracked", ".git", ".jj"})
+                    self.assertEqual((guest / "sub/nested").read_text(), "modified nested contents")
+                    self.assertFalse((guest / "deleted").exists())
+                    self.assertEqual({entry.name for entry in guest.iterdir()}, {"tracked", "sub", ".git", ".jj"})
                     self.assertEqual((guest / ".jj/repo/store/type").read_text(), "git")
-                    self.assertEqual(
-                        subprocess.check_output(["git", "-C", str(guest), "diff", "--", "tracked"]),
-                        subprocess.check_output(["git", "-C", str(local), "diff", "--", "tracked"]),
-                    )
+                    for args in (["diff"], ["diff", "--cached"], ["rev-parse", "HEAD"],
+                                 ["branch", "--show-current"], ["ls-files", "--stage"]):
+                        self.assertEqual(
+                            subprocess.check_output(["git", "-C", str(guest), *args]),
+                            subprocess.check_output(["git", "-C", str(local), *args]),
+                            args,
+                        )
+                    for path in (local / ".jj").rglob("*"):
+                        if path.is_file():
+                            self.assertEqual((guest / path.relative_to(local)).read_bytes(), path.read_bytes())
+                    if jujutsu:
+                        args = ["jj", "--ignore-working-copy", "--no-pager", "log", "-r", "@",
+                                "--no-graph", "-T", "commit_id"]
+                        self.assertEqual(subprocess.check_output(args, cwd=guest),
+                                         subprocess.check_output(args, cwd=local))
                     self.assertEqual(json.loads(status.read_text()), {"state": "complete", "directory": str(guest.resolve())})
                 self.assertTrue(server.exec_bodies)
             finally:
