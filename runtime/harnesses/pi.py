@@ -49,7 +49,7 @@ class PiHarness:
                 files[0].unlink()
                 files = [resumed]
         selector = ["--session", str(files[0])] if files else ["--session-id", self.id, "--session-dir", str(self.sessions)]
-        return ["pi", *selector, "--provider", "magicmtn", "--model", self.config["model"]["id"]]
+        return ["pi", *selector, "--approve", "--provider", "magicmtn", "--model", self.config["model"]["id"]]
 
     def environment(self):
         values = {"PI_CODING_AGENT_DIR": str(self.directory)}
