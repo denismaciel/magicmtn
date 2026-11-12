@@ -114,6 +114,8 @@ pub use inference_deployment::{
 };
 pub mod image_registry;
 pub use image_registry::{Image, ImageRegistryBackend};
+pub mod search_engine;
+pub use search_engine::{SearchEngineBackend, SearchRequest, SearchResponse, SearchResult};
 pub mod plugin;
 
 /// Shared chat task conventions and compatibility helpers.
