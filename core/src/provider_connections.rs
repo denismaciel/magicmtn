@@ -636,15 +636,23 @@ pub async fn bootstrap_local(pool: &PgPool, registry: &Registry) -> anyhow::Resu
     let org: Uuid = sqlx::query_scalar("SELECT organization_id FROM platform_workspace")
         .fetch_one(pool)
         .await?;
-    bootstrap_organization(pool, registry, org).await
+    bootstrap_organization_inner(pool, registry, org, true).await
 }
 pub async fn bootstrap_organization(
     pool: &PgPool,
     registry: &Registry,
     org: Uuid,
 ) -> anyhow::Result<()> {
+    bootstrap_organization_inner(pool, registry, org, false).await
+}
+async fn bootstrap_organization_inner(
+    pool: &PgPool,
+    registry: &Registry,
+    org: Uuid,
+    installed: bool,
+) -> anyhow::Result<()> {
     let registrations: Vec<(String, String)> = sqlx::query_as("SELECT provider,version FROM organization_providers WHERE organization_id=$1 AND status='enabled'").bind(org).fetch_all(pool).await?;
-    let releases = if registrations.is_empty() {
+    let releases = if installed || registrations.is_empty() {
         registry
             .list()?
             .into_iter()
@@ -674,10 +682,7 @@ pub async fn bootstrap_organization(
         refs.push(format!("connection:self-{name}"));
         for reference in refs {
             let id = Uuid::new_v4();
-            let configuration: BTreeMap<_, _> = configuration_keys(name)
-                .iter()
-                .filter_map(|key| std::env::var(key).ok().map(|v| (key.to_string(), v)))
-                .collect();
+            let configuration = local_configuration(name);
             sqlx::query("INSERT INTO provider_connections(id,organization_id,connection_ref,display_name,provider,provider_pin,manifest,configuration,credential_ref) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(organization_id,connection_ref) DO NOTHING")
                 .bind(id).bind(org).bind(reference).bind(name).bind(name).bind(json!(release.pin())).bind(json!(release.manifest)).bind(json!(configuration))
                 .bind(format!("local:{name}")).execute(pool).await?;
@@ -928,15 +933,28 @@ pub async fn dispatch(
     timeout: Duration,
     cleanup: bool,
 ) -> anyhow::Result<ProviderValue> {
-    let row = sqlx::query("SELECT organization_id,status FROM provider_connections WHERE id=$1")
-        .bind(binding.connection_id)
-        .fetch_one(pool)
-        .await?;
-    ensure!(
-        row.get::<Uuid, _>("organization_id") == binding.organization_id
-            && (cleanup || row.get::<String, _>("status") == "enabled"),
-        "connection disabled or wrong organization"
-    );
+    dispatch_store(
+        &pool.clone().into(),
+        registry,
+        binding,
+        scope,
+        operation,
+        timeout,
+        cleanup,
+    )
+    .await
+}
+
+pub async fn dispatch_store(
+    store: &crate::sandbox_storage::Store,
+    registry: &Registry,
+    binding: &Binding,
+    scope: &str,
+    operation: Operation,
+    timeout: Duration,
+    cleanup: bool,
+) -> anyhow::Result<ProviderValue> {
+    store.validate_binding(binding, cleanup).await?;
     ensure!(
         binding.manifest.capabilities.supports(&operation),
         "unsupported provider operation"
@@ -947,7 +965,7 @@ pub async fn dispatch(
             Operation::InferenceDeploymentCreate { spec } => Some(spec.model.as_str()),
             _ => None,
         };
-        if let Some(model) = model {
+        if let (Some(model), crate::sandbox_storage::Store::Postgres(pool)) = (model, store) {
             // Only the trusted service can perform this cross-organization check.
             // A transaction-local override is rolled back before normal dispatch.
             let mut tx = pool.begin().await?;
@@ -969,27 +987,22 @@ pub async fn dispatch(
         _ => None,
     };
     if let Some(kind) = kind {
-        let reserved=sqlx::query("INSERT INTO provider_resource_receipts(organization_id,scope,kind,binding) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING")
-            .bind(binding.organization_id).bind(scope).bind(kind).bind(json!(binding)).execute(pool).await?;
-        if reserved.rows_affected() != 1 {
-            let result:Option<Value>=sqlx::query_scalar("SELECT result FROM provider_resource_receipts WHERE organization_id=$1 AND scope=$2 AND kind=$3 AND binding=$4 AND state='completed'")
-                .bind(binding.organization_id).bind(scope).bind(kind).bind(json!(binding)).fetch_optional(pool).await?.flatten();
-            return serde_json::from_value(
-                result.context("create already dispatched; reconcile instead of replay")?,
-            )
-            .map_err(Into::into);
+        if !store.reserve_receipt(binding, scope, kind).await? {
+            return serde_json::from_value(store.receipt(binding, scope, kind).await?)
+                .map_err(Into::into);
         }
     }
-    let result = dispatch_once(pool, registry, binding, scope, operation, timeout).await;
+    let result = dispatch_once(store, registry, binding, scope, operation, timeout).await;
     if let Some(kind) = kind {
-        sqlx::query("UPDATE provider_resource_receipts SET state=$4,result=$5 WHERE organization_id=$1 AND scope=$2 AND kind=$3")
-            .bind(binding.organization_id).bind(scope).bind(kind).bind(if result.is_ok(){"completed"}else{"uncertain"})
-            .bind(result.as_ref().ok().map(|v|json!(v))).execute(pool).await?;
+        store
+            .finish_receipt(binding, scope, kind, result.as_ref().ok().map(|v| json!(v)))
+            .await?;
     }
     result
 }
+
 async fn dispatch_once(
-    pool: &PgPool,
+    store: &crate::sandbox_storage::Store,
     registry: &Registry,
     binding: &Binding,
     scope: &str,
@@ -997,7 +1010,14 @@ async fn dispatch_once(
     timeout: Duration,
 ) -> anyhow::Result<ProviderValue> {
     if binding.runner_id.is_some() {
-        return crate::provider_runners::dispatch(pool, binding, scope, operation, timeout).await;
+        match store {
+            crate::sandbox_storage::Store::Postgres(pool) => {
+                return crate::provider_runners::dispatch(pool, binding, scope, operation, timeout)
+                    .await
+            }
+            #[cfg(feature = "sqlite")]
+            _ => anyhow::bail!("local connections cannot use remote runners"),
+        }
     }
     let environment = environment(binding)?;
     // Scope includes immutable connection generation to avoid cross-account clients.
@@ -1230,4 +1250,12 @@ mod tests {
         assert!(safe_environment_key("FIREWORKS_API_KEY"));
         assert!(!configuration_keys("fireworks").contains(&"FIREWORKS_API_KEY"));
     }
+}
+
+/// Freeze non-secret local provider configuration with the connection snapshot.
+pub fn local_configuration(provider: &str) -> BTreeMap<String, String> {
+    configuration_keys(provider)
+        .iter()
+        .filter_map(|key| std::env::var(key).ok().map(|v| (key.to_string(), v)))
+        .collect()
 }

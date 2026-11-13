@@ -8,6 +8,8 @@ on:
       - 'Containerfile'
       - 'images/cli.Containerfile'
       - 'cli/**'
+      - 'core/**'
+      - 'local/**'
       - 'release/**'
       - 'scripts/*cli*'
       - 'scripts/install-public.sh'
@@ -26,6 +28,8 @@ on:
       - 'Containerfile'
       - 'images/cli.Containerfile'
       - 'cli/**'
+      - 'core/**'
+      - 'local/**'
       - 'release/**'
       - 'scripts/*cli*'
       - 'scripts/install-public.sh'
@@ -54,4 +58,4 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: rustup toolchain install 1.99.0 --profile minimal && rustup default 1.99.0
       - run: python3 -m unittest discover -s scripts -p test_cli_release.py
-      - run: cargo test --locked -p magicmtn-cli --bin magic
+      - run: cargo test --locked -p magicmtn-cli -p magicmtn-local -p magicmtn-engine --lib --bins --tests -- --test-threads=1

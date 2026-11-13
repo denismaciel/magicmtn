@@ -241,7 +241,7 @@ mod tests {
             std::iter::once(std::ffi::OsStr::new("magic")).chain(command.get_args()),
         )?;
         assert_eq!(
-            parsed.server_url().trim_end_matches('/'),
+            parsed.server_url()?.trim_end_matches('/'),
             server.trim_end_matches('/')
         );
         assert!(matches!(parsed.command, Some(crate::Commands::Pi {

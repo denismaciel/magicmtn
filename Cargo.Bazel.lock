@@ -1,5 +1,5 @@
 {
-  "checksum": "3c6804584ea8b110b3bbac02eff78176f93fcfd5ec032fae79d99c1438ed801c",
+  "checksum": "b67606af822d0af9331fd7188989769ddde857ded00c8d22f80cf786bced86ad",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -2911,7 +2911,20 @@
     },
     "flume 0.11.1": {
       "common_attrs": {
+        "crate_features": [
+          "async",
+          "futures-core",
+          "futures-sink"
+        ],
         "deps": [
+          {
+            "id": "futures-core 0.3.34",
+            "target": "futures_core"
+          },
+          {
+            "id": "futures-sink 0.3.34",
+            "target": "futures_sink"
+          },
           {
             "alias": "spin1",
             "id": "spin 0.9.9",
@@ -3095,6 +3108,10 @@
     },
     "futures-executor 0.3.34": {
       "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
         "deps": [
           {
             "id": "futures-core 0.3.34",
@@ -5280,9 +5297,31 @@
     },
     "libsqlite3-sys 0.30.1": {
       "build_script_attrs": {
+        "deps": [
+          {
+            "id": "cc 1.6.0",
+            "target": "cc"
+          },
+          {
+            "id": "pkg-config 0.3.34",
+            "target": "pkg_config"
+          },
+          {
+            "id": "vcpkg 0.2.15",
+            "target": "vcpkg"
+          }
+        ],
         "links": "sqlite3"
       },
       "common_attrs": {
+        "crate_features": [
+          "bundled",
+          "bundled_bindings",
+          "cc",
+          "pkg-config",
+          "unlock_notify",
+          "vcpkg"
+        ],
         "edition": "2021",
         "extra_deps": [
           ":build_script_build"
@@ -5453,6 +5492,10 @@
     },
     "log 0.4.34": {
       "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "std"
+        ],
         "edition": "2021"
       },
       "library_target_name": "log",
@@ -5685,7 +5728,8 @@
     "magicmtn-engine 0.1.0": {
       "common_attrs": {
         "crate_features": [
-          "default"
+          "default",
+          "sqlite"
         ],
         "deps": [
           {
@@ -5769,6 +5813,76 @@
         {
           "Library": {
             "crate_name": "magicmtn_engine",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "magicmtn-local 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "anyhow 1.0.104",
+            "target": "anyhow"
+          },
+          {
+            "id": "axum 0.7.9",
+            "target": "axum"
+          },
+          {
+            "id": "hex 0.4.3",
+            "target": "hex"
+          },
+          {
+            "id": "ring 0.17.14",
+            "target": "ring"
+          },
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "serde_json 1.0.151",
+            "target": "serde_json"
+          },
+          {
+            "id": "sqlx 0.8.6",
+            "target": "sqlx"
+          },
+          {
+            "id": "tempfile 3.27.0",
+            "target": "tempfile"
+          },
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          },
+          {
+            "id": "tracing-subscriber 0.3.23",
+            "target": "tracing_subscriber"
+          },
+          {
+            "id": "uuid 1.27.0",
+            "target": "uuid"
+          }
+        ],
+        "deps_dev": [
+          {
+            "id": "tower 0.5.3",
+            "target": "tower"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "magicmtn_local",
+      "license_file": "../LICENSE",
+      "name": "magicmtn-local",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "magicmtn_local",
             "crate_root": "src/lib.rs"
           }
         }
@@ -6109,6 +6223,50 @@
         }
       ],
       "version": "1.2.4"
+    },
+    "nu-ansi-term 0.50.3": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "alias": "windows",
+                "id": "windows-sys 0.61.2",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "nu_ansi_term",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "nu-ansi-term",
+      "package_url": "https://github.com/nushell/nu-ansi-term",
+      "repository": {
+        "Http": {
+          "sha256": "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5",
+          "url": "https://static.crates.io/crates/nu-ansi-term/0.50.3/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nu_ansi_term",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.50.3"
     },
     "num-bigint-dig 0.8.6": {
       "build_script_attrs": {},
@@ -9029,6 +9187,40 @@
       ],
       "version": "0.10.9"
     },
+    "sharded-slab 0.1.7": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "lazy_static 1.5.1",
+            "target": "lazy_static"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "sharded_slab",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "sharded-slab",
+      "package_url": "https://github.com/hawkw/sharded-slab",
+      "repository": {
+        "Http": {
+          "sha256": "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6",
+          "url": "https://static.crates.io/crates/sharded-slab/0.1.7/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sharded_slab",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.7"
+    },
     "shlex 2.0.1": {
       "common_attrs": {
         "crate_features": [
@@ -9382,6 +9574,24 @@
     },
     "spin 0.9.9": {
       "common_attrs": {
+        "crate_features": [
+          "barrier",
+          "default",
+          "lazy",
+          "lock_api",
+          "lock_api_crate",
+          "mutex",
+          "once",
+          "rwlock",
+          "spin_mutex"
+        ],
+        "deps": [
+          {
+            "alias": "lock_api_crate",
+            "id": "lock_api 0.4.14",
+            "target": "lock_api"
+          }
+        ],
         "edition": "2015"
       },
       "library_target_name": "spin",
@@ -9447,6 +9657,7 @@
       "common_attrs": {
         "crate_features": [
           "_rt-tokio",
+          "_sqlite",
           "any",
           "chrono",
           "default",
@@ -9457,8 +9668,10 @@
           "postgres",
           "runtime-tokio",
           "runtime-tokio-rustls",
+          "sqlite",
           "sqlx-macros",
           "sqlx-postgres",
+          "sqlx-sqlite",
           "tls-rustls-ring",
           "tls-rustls-ring-webpki",
           "uuid"
@@ -9471,6 +9684,10 @@
           {
             "id": "sqlx-postgres 0.8.6",
             "target": "sqlx_postgres"
+          },
+          {
+            "id": "sqlx-sqlite 0.8.6",
+            "target": "sqlx_sqlite"
           }
         ],
         "edition": "2021",
@@ -9689,6 +9906,7 @@
           "macros",
           "migrate",
           "postgres",
+          "sqlite",
           "uuid"
         ],
         "deps": [
@@ -9744,6 +9962,7 @@
       "common_attrs": {
         "crate_features": [
           "_rt-tokio",
+          "_sqlite",
           "_tls-rustls-ring-webpki",
           "chrono",
           "default",
@@ -9752,7 +9971,9 @@
           "macros",
           "migrate",
           "postgres",
+          "sqlite",
           "sqlx-postgres",
+          "sqlx-sqlite",
           "tokio",
           "uuid"
         ],
@@ -9804,6 +10025,10 @@
           {
             "id": "sqlx-postgres 0.8.6",
             "target": "sqlx_postgres"
+          },
+          {
+            "id": "sqlx-sqlite 0.8.6",
+            "target": "sqlx_sqlite"
           },
           {
             "id": "syn 2.0.119",
@@ -10179,10 +10404,24 @@
     },
     "sqlx-sqlite 0.8.6": {
       "common_attrs": {
+        "crate_features": [
+          "any",
+          "bundled",
+          "chrono",
+          "json",
+          "migrate",
+          "offline",
+          "serde",
+          "uuid"
+        ],
         "deps": [
           {
             "id": "atoi 2.0.0",
             "target": "atoi"
+          },
+          {
+            "id": "chrono 0.4.45",
+            "target": "chrono"
           },
           {
             "id": "flume 0.11.1",
@@ -10221,6 +10460,10 @@
             "target": "percent_encoding"
           },
           {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
             "id": "serde_urlencoded 0.7.1",
             "target": "serde_urlencoded"
           },
@@ -10239,6 +10482,10 @@
           {
             "id": "url 2.5.8",
             "target": "url"
+          },
+          {
+            "id": "uuid 1.27.0",
+            "target": "uuid"
           }
         ],
         "edition": "2021"
@@ -10885,6 +11132,41 @@
         }
       ],
       "version": "2.0.21"
+    },
+    "thread_local 1.1.10": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "cfg-if 1.0.5",
+            "target": "cfg_if"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "thread_local",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "thread_local",
+      "package_url": "https://github.com/Amanieu/thread_local-rs",
+      "repository": {
+        "Http": {
+          "sha256": "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070",
+          "url": "https://static.crates.io/crates/thread_local/1.1.10/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "thread_local",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.1.10"
     },
     "time 0.3.55": {
       "common_attrs": {
@@ -11842,6 +12124,7 @@
     "tracing-core 0.1.36": {
       "common_attrs": {
         "crate_features": [
+          "default",
           "once_cell",
           "std"
         ],
@@ -11876,6 +12159,119 @@
         }
       ],
       "version": "0.1.36"
+    },
+    "tracing-log 0.2.0": {
+      "common_attrs": {
+        "crate_features": [
+          "log-tracer",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "log 0.4.34",
+            "target": "log"
+          },
+          {
+            "id": "once_cell 1.21.4",
+            "target": "once_cell"
+          },
+          {
+            "id": "tracing-core 0.1.36",
+            "target": "tracing_core"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "tracing_log",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "tracing-log",
+      "package_url": "https://github.com/tokio-rs/tracing",
+      "repository": {
+        "Http": {
+          "sha256": "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3",
+          "url": "https://static.crates.io/crates/tracing-log/0.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_log",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.0"
+    },
+    "tracing-subscriber 0.3.23": {
+      "common_attrs": {
+        "crate_features": [
+          "alloc",
+          "ansi",
+          "default",
+          "fmt",
+          "nu-ansi-term",
+          "registry",
+          "sharded-slab",
+          "smallvec",
+          "std",
+          "thread_local",
+          "tracing-log"
+        ],
+        "deps": [
+          {
+            "id": "nu-ansi-term 0.50.3",
+            "target": "nu_ansi_term"
+          },
+          {
+            "id": "sharded-slab 0.1.7",
+            "target": "sharded_slab"
+          },
+          {
+            "id": "smallvec 1.16.2",
+            "target": "smallvec"
+          },
+          {
+            "id": "thread_local 1.1.10",
+            "target": "thread_local"
+          },
+          {
+            "id": "tracing-core 0.1.36",
+            "target": "tracing_core"
+          },
+          {
+            "id": "tracing-log 0.2.0",
+            "target": "tracing_log"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "tracing_subscriber",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "tracing-subscriber",
+      "package_url": "https://github.com/tokio-rs/tracing",
+      "repository": {
+        "Http": {
+          "sha256": "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319",
+          "url": "https://static.crates.io/crates/tracing-subscriber/0.3.23/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_subscriber",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.3.23"
     },
     "try-lock 0.2.5": {
       "common_attrs": {
@@ -12533,6 +12929,43 @@
         }
       ],
       "version": "1.27.0"
+    },
+    "valuable 0.1.1": {
+      "build_script_attrs": {},
+      "common_attrs": {
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "valuable",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "valuable",
+      "package_url": "https://github.com/tokio-rs/valuable",
+      "repository": {
+        "Http": {
+          "sha256": "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65",
+          "url": "https://static.crates.io/crates/valuable/0.1.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "valuable",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.1.1"
     },
     "vcpkg 0.2.15": {
       "common_attrs": {
@@ -15012,6 +15445,7 @@
     "tokio-tungstenite 0.24.0",
     "toml 0.8.23",
     "tracing 0.1.44",
+    "tracing-subscriber 0.3.23",
     "uuid 1.27.0",
     "zeroize 1.9.0"
   ],
@@ -15023,6 +15457,7 @@
     "magicmtn-cli 0.1.0": "cli",
     "magicmtn-contracts 0.1.0": "sdk/rust/magicmtn-contracts",
     "magicmtn-engine 0.1.0": "core",
+    "magicmtn-local 0.1.0": "local",
     "magicmtn-provider-framework 0.1.0": "sdk/rust/magicmtn-provider-framework",
     "magicmtn-sdk 0.1.0": "sdk/rust/magicmtn-sdk"
   }

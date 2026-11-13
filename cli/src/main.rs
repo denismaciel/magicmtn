@@ -28,40 +28,55 @@ mod update;
     version
 )]
 struct Cli {
-    #[cfg(feature = "development-server")]
-    #[arg(
-        long,
-        env = "MAGICMTN_SERVER_URL",
-        default_value = "http://127.0.0.1:8080",
-        global = true
-    )]
-    server_url: String,
+    /// Connect to the single-user server started by `magic server start`
+    #[arg(long, global = true, conflicts_with = "server_url")]
+    local: bool,
+    /// Select a server explicitly; credentials remain scoped to that URL
+    #[arg(long, global = true)]
+    server_url: Option<String>,
     #[command(subcommand)]
     command: Option<Commands>,
 }
 
 impl Cli {
-    fn server_url(&self) -> &str {
-        #[cfg(feature = "development-server")]
-        {
-            &self.server_url
+    fn server_url(&self) -> Result<String> {
+        if self.local {
+            return Ok(magicmtn_local::connection(&magicmtn_local::directory()?)?.url);
         }
-        #[cfg(not(feature = "development-server"))]
-        {
-            "https://api.magicmtn.ai"
-        }
+        Ok(self
+            .server_url
+            .clone()
+            .or_else(|| std::env::var("MAGICMTN_SERVER_URL").ok())
+            .unwrap_or_else(|| {
+                if cfg!(feature = "development-server") {
+                    "http://127.0.0.1:8080"
+                } else {
+                    "https://api.magicmtn.ai"
+                }
+                .into()
+            }))
     }
 }
 
 #[cfg(all(test, not(feature = "development-server")))]
 #[test]
-fn production_backend_is_fixed() {
+fn cloud_is_default_and_server_selection_is_explicit() {
     let cli = Cli::try_parse_from(["magic"]).unwrap();
-    assert_eq!(cli.server_url(), "https://api.magicmtn.ai");
+    assert_eq!(cli.server_url().unwrap(), "https://api.magicmtn.ai");
+    let cli = Cli::try_parse_from(["magic", "--server-url", "http://127.0.0.1:8080"]).unwrap();
+    assert_eq!(cli.server_url().unwrap(), "http://127.0.0.1:8080");
+    assert!(
+        Cli::try_parse_from(["magic", "--local", "--server-url", "http://127.0.0.1:8080"]).is_err()
+    );
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Run the single-user MagicMtn server on this machine
+    Server {
+        #[command(subcommand)]
+        command: ServerCommands,
+    },
     /// Expose MagicMtn sandbox tools to MCP clients
     #[command(display_order = 5)]
     Mcp {
@@ -132,6 +147,17 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
+enum ServerCommands {
+    /// Initialize local state and serve sandbox operations until interrupted
+    Start {
+        #[arg(long, default_value = "127.0.0.1:8080")]
+        bind: std::net::SocketAddr,
+        #[arg(long, default_value_t = 86400, value_parser = clap::value_parser!(u32).range(1..=86400))]
+        ttl_seconds: u32,
+    },
+}
+
+#[derive(Subcommand)]
 enum WhoamiCommands {
     /// Show plan access for your organization, or your personal account
     Plan,
@@ -174,6 +200,14 @@ enum SandboxCommands {
         connection: Option<String>,
         #[arg(long, requires = "image")]
         notes: Option<String>,
+    },
+    /// Execute a bounded command in a sandbox
+    Exec {
+        id: String,
+        #[arg(long, default_value_t = 30000, value_parser = clap::value_parser!(u64).range(1..=30000))]
+        timeout_ms: u64,
+        #[arg(required = true, trailing_var_arg = true)]
+        command: Vec<String>,
     },
     /// Open an interactive shell; Ctrl+] disconnects without stopping the sandbox
     Ssh { id: String },
@@ -557,7 +591,8 @@ async fn main() -> Result<()> {
         Some(Commands::Pi { command }) => Some(command.operation()),
         _ => None,
     };
-    let server_url = cli.server_url().to_owned();
+    let server_url = cli.server_url()?;
+    let operation = operation.filter(|_| server_url == "https://api.magicmtn.ai");
     let sentry = operation.map(|_| telemetry::init());
     let result = run(cli).await;
     if let (Some(operation), Err(error)) = (operation, &result) {
@@ -568,11 +603,24 @@ async fn main() -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<()> {
-    let server_url = cli.server_url().to_owned();
+    let server_url = cli.server_url()?;
+    let local = cli.local;
     let Some(command) = cli.command else {
         Cli::command().print_help()?;
         return Ok(());
     };
+    if let Commands::Server {
+        command: ServerCommands::Start { bind, ttl_seconds },
+    } = command
+    {
+        return magicmtn_local::run(magicmtn_local::Options {
+            bind,
+            ttl_seconds,
+            directory: magicmtn_local::directory()?,
+            provider_directory: configuration::directory()?.join("providers"),
+        })
+        .await;
+    }
     if let Commands::Uninstall = command {
         return uninstall::run(&server_url).await;
     }
@@ -605,7 +653,20 @@ async fn run(cli: Cli) -> Result<()> {
         };
     }
     let mut api = Api::new(&server_url)?;
-    if !matches!(command, Commands::Login { .. }) {
+    if local {
+        let info = magicmtn_local::connection(&magicmtn_local::directory()?)?;
+        let url = reqwest::Url::parse(&info.url)?;
+        anyhow::ensure!(
+            url.scheme() == "http"
+                && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")),
+            "local connection must use loopback HTTP"
+        );
+        anyhow::ensure!(
+            Api::new(&info.url)?.base == api.base,
+            "local server connection changed; retry the command"
+        );
+        api.token = Some(info.token);
+    } else if !matches!(command, Commands::Login { .. }) {
         api.token = authentication::Credentials::new()?.load(&api.base)?;
     }
     match command {
@@ -642,6 +703,10 @@ async fn run(cli: Cli) -> Result<()> {
             connection,
             notes,
         } => {
+            anyhow::ensure!(
+                !local || image.is_some(),
+                "select a local sandbox image with --image (for example, ubuntu:24.04)"
+            );
             let explicit_image = image.is_some();
             let key = uuid::Uuid::new_v4();
             eprintln!("Creating sandbox {key}.");
@@ -673,6 +738,21 @@ async fn run(cli: Cli) -> Result<()> {
             } else {
                 println!("{}", text(&result, "id"));
             }
+        }
+        SandboxCommands::Exec {
+            id,
+            timeout_ms,
+            command,
+        } => {
+            validate_id(&id)?;
+            let result = api.request(Method::POST, &format!("v1/sandboxes/{id}/exec"), Some(json!({
+                "command": command[0], "args": command[1..], "timeout_ms": timeout_ms, "max_output_bytes": 16384,
+            }))).await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            anyhow::ensure!(
+                result["exit_code"] == 0 && result["timed_out"] != true,
+                "sandbox command failed or timed out"
+            );
         }
         SandboxCommands::Ssh { id } => {
             validate_id(&id)?;

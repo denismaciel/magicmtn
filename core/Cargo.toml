@@ -33,6 +33,7 @@ zeroize = "1.8"
 default = []
 credential-vault-aws = ["dep:aws-config", "dep:aws-sdk-kms"]
 acceptance-failpoints = []
+sqlite = ["sqlx/sqlite"]
 
 [dev-dependencies]
 base64 = "0.22"

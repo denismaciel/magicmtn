@@ -8,6 +8,8 @@ fn magic(args: &[&str], server: Option<&str>) -> Output {
         .env("HOME", home.path())
         .env_remove("MAGICMTN_SERVER_URL")
         .env_remove("MAGICMTN_CA_CERT")
+        .env_remove("MAGICMTN_CONFIG_DIRECTORY")
+        .env_remove("MAGICMTN_LOCAL_DIRECTORY")
         .env("MAGICMTN_ORGANIZATION_ID", "not-a-uuid");
     if let Some(server) = server {
         command.env("MAGICMTN_SERVER_URL", server);
@@ -16,50 +18,39 @@ fn magic(args: &[&str], server: Option<&str>) -> Output {
 }
 
 #[test]
-fn server_override_matches_build_mode() {
+fn server_override_is_available_in_every_build() {
     let output = magic(&["--server-url", "http://127.0.0.1:8080", "whoami"], None);
-    let error = String::from_utf8(output.stderr).unwrap();
     assert!(!output.status.success());
-    if cfg!(feature = "development-server") {
-        assert!(error.contains("not signed in"), "{error}");
-    } else {
-        assert!(
-            error.contains("unexpected argument '--server-url'"),
-            "{error}"
-        );
-    }
+    assert!(String::from_utf8_lossy(&output.stderr).contains("not signed in"));
 }
 
 #[test]
-fn production_ignores_server_environment() {
-    let baseline = magic(&["whoami"], None);
+fn explicit_server_takes_precedence_over_environment() {
     let overridden = magic(&["whoami"], Some("not-a-url"));
-    assert!(!baseline.status.success());
-    assert!(!overridden.status.success());
-    assert!(String::from_utf8_lossy(&baseline.stderr).contains("not signed in"));
-    if cfg!(feature = "development-server") {
-        assert!(String::from_utf8_lossy(&overridden.stderr).contains("relative URL"));
-        let explicit = magic(
-            &["--server-url", "http://127.0.0.1:8080", "whoami"],
-            Some("not-a-url"),
-        );
-        assert!(String::from_utf8_lossy(&explicit.stderr).contains("not signed in"));
-    } else {
-        assert_eq!(baseline.stderr, overridden.stderr);
-    }
+    assert!(String::from_utf8_lossy(&overridden.stderr).contains("relative URL"));
+    let explicit = magic(
+        &["--server-url", "http://127.0.0.1:8080", "whoami"],
+        Some("not-a-url"),
+    );
+    assert!(String::from_utf8_lossy(&explicit.stderr).contains("not signed in"));
 }
 
 #[test]
-fn help_and_completions_expose_only_available_options() {
+fn local_selection_overrides_the_server_environment() {
+    let output = magic(&["--local", "sandbox", "list"], Some("not-a-url"));
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("magic server start"));
+}
+
+#[test]
+fn help_and_completions_expose_server_selection() {
     for args in [vec!["--help"], vec!["completion", "bash", "--print"]] {
         let output = magic(&args, None);
         assert!(output.status.success());
         let text = String::from_utf8(output.stdout).unwrap();
         assert!(!text.contains("--organization"));
-        assert_eq!(
-            text.contains("--server-url"),
-            cfg!(feature = "development-server")
-        );
+        assert!(text.contains("--server-url"));
+        assert!(text.contains("--local"));
     }
 }
 

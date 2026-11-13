@@ -1,5 +1,6 @@
 //! Durable sandbox cleanup and authoritative runtime reconciliation.
 //! Database leases fence workers; provider calls never run inside a transaction.
+use crate::sandbox_storage::Store;
 use anyhow::{ensure, Context, Result};
 use magicmtn_provider_framework::host::{Pin, Registry};
 use magicmtn_sdk::{
@@ -11,8 +12,8 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use std::time::Duration;
 use uuid::Uuid;
 
-const INSPECTION_SECONDS: i32 = 60;
-const LEASE_SECONDS: i32 = 120;
+pub(crate) const INSPECTION_SECONDS: i32 = 60;
+pub(crate) const LEASE_SECONDS: i32 = 120;
 const CALL_SECONDS: u64 = 30;
 
 /// Lock sessions before the sandbox everywhere, including worker completion.
@@ -128,15 +129,7 @@ pub async fn recover_received_resources(pool: &PgPool) -> Result<()> {
         crate::workspace::set_transaction(&mut tx, binding.organization_id).await?;
         let session=sqlx::query("SELECT s.sandbox_id,s.selected_compute_id,s.compute_snapshot,s.sandbox_ttl_seconds,s.sandbox_expires_at,a.manifest FROM chat_sessions s JOIN artifact_manifests a ON a.revision_id=s.revision_id WHERE s.id=$1 AND $2='session' FOR UPDATE OF s")
             .bind(id).bind(source).fetch_optional(&mut *tx).await?;
-        let mut metadata = sandbox
-            .metadata
-            .clone()
-            .unwrap_or_else(|| serde_json::json!({}));
-        metadata["provider"] = serde_json::json!(binding.pin.name);
-        metadata["backend_version"] = serde_json::json!(binding.pin.version);
-        metadata["_magicmtn_connection"] = serde_json::json!(binding);
-        metadata["_magicmtn_provider"] = serde_json::json!(binding.pin);
-        metadata["_magicmtn_scope"] = serde_json::json!(scope);
+        let mut metadata = receipt_metadata(&sandbox, &binding, &scope);
         if let Some(session) = session {
             if session.get::<Option<Uuid>, _>("sandbox_id").is_none() {
                 let sandbox_id = Uuid::new_v4();
@@ -167,14 +160,14 @@ pub async fn recover_received_resources(pool: &PgPool) -> Result<()> {
 }
 
 #[derive(Debug)]
-struct Job {
-    id: Uuid,
-    operation: String,
-    pin: Option<Pin>,
-    scope: String,
-    token: Uuid,
-    attempts: i32,
-    sandbox: ProviderSandbox,
+pub(crate) struct Job {
+    pub(crate) id: Uuid,
+    pub(crate) operation: String,
+    pub(crate) pin: Option<Pin>,
+    pub(crate) scope: String,
+    pub(crate) token: Uuid,
+    pub(crate) attempts: i32,
+    pub(crate) sandbox: ProviderSandbox,
 }
 
 async fn claim(pool: &PgPool, id: Option<Uuid>) -> Result<Option<Job>> {
@@ -216,7 +209,7 @@ pub trait LifecycleProvider: Sync {
     fn release<'a>(&'a self, scope: &'a str) -> BoxFuture<'a, ()>;
     fn call_bound<'a>(
         &'a self,
-        _pool: &'a PgPool,
+        _store: &'a Store,
         binding: Option<&'a crate::provider_connections::Binding>,
         pin: &'a Pin,
         scope: &'a str,
@@ -229,7 +222,7 @@ pub trait LifecycleProvider: Sync {
 impl LifecycleProvider for Registry {
     fn call_bound<'a>(
         &'a self,
-        pool: &'a PgPool,
+        store: &'a Store,
         binding: Option<&'a crate::provider_connections::Binding>,
         pin: &'a Pin,
         scope: &'a str,
@@ -238,8 +231,8 @@ impl LifecycleProvider for Registry {
         Box::pin(async move {
             match binding {
                 Some(binding) => {
-                    crate::provider_connections::dispatch(
-                        pool,
+                    crate::provider_connections::dispatch_store(
+                        store,
                         self,
                         binding,
                         scope,
@@ -294,13 +287,13 @@ impl LifecycleProvider for Registry {
     }
 }
 
-enum Observation {
+pub(crate) enum Observation {
     Terminated,
     State(SandboxState),
 }
 
 async fn execute(
-    pool: &PgPool,
+    store: &Store,
     provider: &impl LifecycleProvider,
     job: &Job,
 ) -> Result<Observation> {
@@ -323,9 +316,7 @@ async fn execute(
         )?,
     };
     // Resolve a legacy reference once, before any external side effect.
-    let saved = sqlx::query("UPDATE sandbox_lifecycle_jobs SET provider_pin=$3 WHERE sandbox_id=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp()")
-        .bind(job.id).bind(job.token).bind(serde_json::to_value(&pin)?).execute(pool).await?;
-    ensure!(saved.rows_affected() == 1, "lifecycle lease fenced");
+    store.fence_pin(job, &pin).await?;
     let supports_status = match &binding {
         Some(binding) => binding
             .manifest
@@ -342,7 +333,7 @@ async fn execute(
             ensure!(supports_status, "provider_status_unsupported");
             match provider
                 .call_bound(
-                    pool,
+                    store,
                     binding.as_ref(),
                     &pin,
                     &scope,
@@ -359,7 +350,7 @@ async fn execute(
             if supports_status {
                 match provider
                     .call_bound(
-                        pool,
+                        store,
                         binding.as_ref(),
                         &pin,
                         &scope,
@@ -378,7 +369,7 @@ async fn execute(
             }
             match provider
                 .call_bound(
-                    pool,
+                    store,
                     binding.as_ref(),
                     &pin,
                     &scope,
@@ -408,39 +399,29 @@ async fn finish(pool: &PgPool, job: &Job, result: &Result<Observation>) -> Resul
     if !valid {
         return Ok(false);
     }
-    let mut complete = record["status"] == "ended";
-    let mut delay = INSPECTION_SECONDS;
-    let mut error = None;
-    match result {
-        Ok(observation) if !complete => {
-            let (state, terminal, reason) = match observation {
-                Observation::Terminated => ("missing", true, "sandbox_terminated"),
-                Observation::State(SandboxState::Missing) => ("missing", true, "runtime_missing"),
-                Observation::State(SandboxState::Stopped) => ("stopped", false, "runtime_stopped"),
-                Observation::State(SandboxState::Running) => ("running", false, ""),
-            };
-            complete = terminal;
-            sqlx::query("UPDATE sandboxes SET status=$2,runtime_state=$3,runtime_checked_at=now(),runtime_error=NULL,end_time_ms=CASE WHEN $4 THEN COALESCE(end_time_ms,(extract(epoch FROM now())*1000)::bigint) ELSE end_time_ms END,shutdown_reason=CASE WHEN $4 THEN COALESCE(shutdown_reason,$5) ELSE shutdown_reason END WHERE id=$1")
-                .bind(job.id).bind(if terminal { "ended" } else { state }).bind(state).bind(terminal).bind(reason).execute(&mut *tx).await?;
-            if state != "running" {
-                sqlx::query("UPDATE chat_turns t SET state='stopped',terminal_reason=$2,lease_token=NULL,updated_at=now() FROM chat_sessions s WHERE t.session_id=s.id AND s.sandbox_id=$1 AND t.state IN ('queued','running')")
-                    .bind(job.id).bind(reason).execute(&mut *tx).await?;
-                sqlx::query("UPDATE chat_sessions SET state='interrupted',updated_at=now() WHERE sandbox_id=$1 AND state<>'ended' AND state<>'interrupted'")
-                    .bind(job.id).execute(&mut *tx).await?;
-            }
+    let outcome = completion(record["status"] == "ended", job.attempts, result);
+    let Completion {
+        complete,
+        delay,
+        error,
+        observation,
+    } = outcome;
+    if let Some((state, terminal, reason)) = observation {
+        sqlx::query("UPDATE sandboxes SET status=$2,runtime_state=$3,runtime_checked_at=now(),runtime_error=NULL,end_time_ms=CASE WHEN $4 THEN COALESCE(end_time_ms,(extract(epoch FROM now())*1000)::bigint) ELSE end_time_ms END,shutdown_reason=CASE WHEN $4 THEN COALESCE(shutdown_reason,$5) ELSE shutdown_reason END WHERE id=$1")
+            .bind(job.id).bind(if terminal { "ended" } else { state }).bind(state).bind(terminal).bind(reason).execute(&mut *tx).await?;
+        if state != "running" {
+            sqlx::query("UPDATE chat_turns t SET state='stopped',terminal_reason=$2,lease_token=NULL,updated_at=now() FROM chat_sessions s WHERE t.session_id=s.id AND s.sandbox_id=$1 AND t.state IN ('queued','running')")
+                .bind(job.id).bind(reason).execute(&mut *tx).await?;
+            sqlx::query("UPDATE chat_sessions SET state='interrupted',updated_at=now() WHERE sandbox_id=$1 AND state<>'ended' AND state<>'interrupted'")
+                .bind(job.id).execute(&mut *tx).await?;
         }
-        Err(e) if !complete => {
-            // Keep the last confirmed observation and timestamp on failure.
-            // Never turn provider unavailability into a false missing result.
-            error = Some(e.to_string().chars().take(1000).collect::<String>());
-            delay = (2_i32.saturating_pow(job.attempts.min(9) as u32)).clamp(2, 300);
-            sqlx::query("UPDATE sandboxes SET runtime_error=$2 WHERE id=$1")
-                .bind(job.id)
-                .bind(&error)
-                .execute(&mut *tx)
-                .await?;
-        }
-        _ => {}
+    }
+    if let Some(error) = &error {
+        sqlx::query("UPDATE sandboxes SET runtime_error=$2 WHERE id=$1")
+            .bind(job.id)
+            .bind(error)
+            .execute(&mut *tx)
+            .await?;
     }
     sqlx::query("UPDATE sandbox_lifecycle_jobs SET completed_at=CASE WHEN $3 THEN now() ELSE NULL END,lease_token=NULL,lease_expires_at=NULL,next_attempt_at=now()+make_interval(secs=>$4),last_error=$5,attempts=CASE WHEN $5::text IS NULL THEN 0 ELSE attempts END,updated_at=now() WHERE sandbox_id=$1 AND lease_token=$2")
         .bind(job.id).bind(job.token).bind(complete).bind(delay as f64).bind(error).execute(&mut *tx).await?;
@@ -455,12 +436,20 @@ pub async fn run_one(
     provider: &impl LifecycleProvider,
     id: Option<Uuid>,
 ) -> Result<bool> {
-    let Some(job) = claim(pool, id).await? else {
+    run_one_store(&pool.clone().into(), provider, id).await
+}
+
+pub async fn run_one_store(
+    store: &Store,
+    provider: &impl LifecycleProvider,
+    id: Option<Uuid>,
+) -> Result<bool> {
+    let Some(job) = store.claim(id).await? else {
         return Ok(false);
     };
     // Bound the whole attempt, including connection startup, not only RPC calls.
     let result =
-        match tokio::time::timeout(Duration::from_secs(75), execute(pool, provider, &job)).await {
+        match tokio::time::timeout(Duration::from_secs(75), execute(store, provider, &job)).await {
             Ok(result) => result,
             Err(_) => {
                 let _ = provider
@@ -472,7 +461,7 @@ pub async fn run_one(
     if let Err(error) = &result {
         tracing::warn!(sandbox_id=%job.id,operation=%job.operation,%error,"sandbox lifecycle attempt deferred");
     }
-    if finish(pool, &job, &result).await? {
+    if store.finish(&job, &result).await? {
         // In-flight harness RPCs are fenced, but can still hold a client lock.
         // Finishing a cleanup request must not wait on an entire model call.
         let _ = tokio::time::timeout(Duration::from_secs(5), provider.release(&job.scope)).await;
@@ -481,22 +470,26 @@ pub async fn run_one(
 }
 
 pub async fn run(pool: PgPool, registry: Registry) {
+    run_store(pool.into(), registry).await
+}
+
+pub async fn run_store(store: Store, registry: Registry) {
     let mut interval = tokio::time::interval(Duration::from_secs(2));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut workers = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if let Err(error) = schedule(&pool).await {
+                if let Err(error) = store.schedule().await {
                     tracing::error!(%error,"sandbox lifecycle scheduling failed");
                     continue;
                 }
                 // Bound provider concurrency without letting an unavailable
                 // backend delay scheduling and recovery for every other one.
                 while workers.len() < 4 {
-                    let pool = pool.clone();
+                    let store = store.clone();
                     let registry = registry.clone();
-                    workers.spawn(async move { run_one(&pool, &registry, None).await });
+                    workers.spawn(async move { run_one_store(&store, &registry, None).await });
                 }
             },
             result = workers.join_next(), if !workers.is_empty() => {
@@ -578,8 +571,8 @@ mod tests {
     async fn migrate(pool: &PgPool) -> Result<()> {
         let directory = std::env::var("MAGICMTN_TEST_MIGRATIONS")
             .context("MAGICMTN_TEST_MIGRATIONS must identify the database migration directory")?;
-        sqlx::migrate::Migrator::new(std::path::Path::new(&directory))
-            .await?
+        let host = sqlx::migrate::Migrator::new(std::path::Path::new(&directory)).await?;
+        crate::schema::compose(host.iter().cloned())
             .run(pool)
             .await?;
         Ok(())
@@ -715,7 +708,7 @@ mod tests {
         request(&pool, id).await?; // Repeated requests cannot steal the lease.
         assert!(claim(&pool, Some(id)).await?.is_none());
         let fake = Fake::new(SandboxState::Running);
-        execute(&pool, &fake, &job).await?; // Simulate crash before finish commits.
+        execute(&pool.clone().into(), &fake, &job).await?; // Simulate crash before finish commits.
         assert_eq!(fake.removals.load(Ordering::SeqCst), 1);
         sqlx::query("UPDATE sandbox_lifecycle_jobs SET lease_expires_at=now()-interval '1 second' WHERE sandbox_id=$1").bind(id).execute(&pool).await?;
         run_one(&pool, &fake, Some(id)).await?;
@@ -843,4 +836,90 @@ mod tests {
         assert_eq!(status(&pool, id3).await?, "ended");
         Ok(())
     }
+}
+
+/// The lifecycle decision is shared; adapters only persist it atomically with
+/// lease validation and any host-specific attached session updates.
+pub(crate) struct Completion {
+    pub complete: bool,
+    pub delay: i32,
+    pub error: Option<String>,
+    pub observation: Option<(&'static str, bool, &'static str)>,
+}
+pub(crate) fn completion(ended: bool, attempts: i32, result: &Result<Observation>) -> Completion {
+    let mut out = Completion {
+        complete: ended,
+        delay: INSPECTION_SECONDS,
+        error: None,
+        observation: None,
+    };
+    if ended {
+        return out;
+    }
+    match result {
+        Ok(observation) => {
+            let observation = match observation {
+                Observation::Terminated => ("missing", true, "sandbox_terminated"),
+                Observation::State(SandboxState::Missing) => ("missing", true, "runtime_missing"),
+                Observation::State(SandboxState::Stopped) => ("stopped", false, "runtime_stopped"),
+                Observation::State(SandboxState::Running) => ("running", false, ""),
+            };
+            out.complete = observation.1;
+            out.observation = Some(observation);
+        }
+        Err(error) => {
+            out.error = Some(error.to_string().chars().take(1000).collect());
+            out.delay = (2_i32.saturating_pow(attempts.min(9) as u32)).clamp(2, 300);
+        }
+    }
+    out
+}
+impl Store {
+    pub async fn schedule(&self) -> Result<()> {
+        match self {
+            Self::Postgres(pool) => schedule(pool).await,
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(db) => db.schedule().await,
+        }
+    }
+    async fn claim(&self, id: Option<Uuid>) -> Result<Option<Job>> {
+        match self {
+            Self::Postgres(pool) => claim(pool, id).await,
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(db) => db.claim(id).await,
+        }
+    }
+    async fn fence_pin(&self, job: &Job, pin: &Pin) -> Result<()> {
+        let affected=match self {
+            Self::Postgres(pool)=>sqlx::query("UPDATE sandbox_lifecycle_jobs SET provider_pin=$3 WHERE sandbox_id=$1 AND lease_token=$2 AND lease_expires_at>clock_timestamp()").bind(job.id).bind(job.token).bind(serde_json::to_value(pin)?).execute(pool).await?.rows_affected(),
+            #[cfg(feature="sqlite")]
+            Self::Sqlite(db)=>db.fence_pin(job,pin).await?,
+        };
+        ensure!(affected == 1, "lifecycle lease fenced");
+        Ok(())
+    }
+    async fn finish(&self, job: &Job, result: &Result<Observation>) -> Result<bool> {
+        match self {
+            Self::Postgres(pool) => finish(pool, job, result).await,
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(db) => db.finish(job, result).await,
+        }
+    }
+}
+
+pub(crate) fn receipt_metadata(
+    sandbox: &ProviderSandbox,
+    binding: &crate::provider_connections::Binding,
+    scope: &str,
+) -> Value {
+    let mut metadata = sandbox
+        .metadata
+        .clone()
+        .unwrap_or_else(|| serde_json::json!({}));
+    metadata["provider"] = serde_json::json!(binding.pin.name);
+    metadata["backend_version"] = serde_json::json!(binding.pin.version);
+    metadata["_magicmtn_connection"] = serde_json::json!(binding);
+    metadata["_magicmtn_provider"] = serde_json::json!(binding.pin);
+    metadata["_magicmtn_scope"] = serde_json::json!(scope);
+    metadata
 }

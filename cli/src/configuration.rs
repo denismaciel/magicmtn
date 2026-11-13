@@ -15,6 +15,9 @@ struct Config {
     local_sandbox: bool,
 }
 pub(crate) fn directory() -> Result<PathBuf> {
+    if let Some(path) = std::env::var_os("MAGICMTN_CONFIG_DIRECTORY") {
+        return Ok(path.into());
+    }
     Ok(
         PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?)
             .join(".config/magicmtn"),

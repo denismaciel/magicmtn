@@ -15,6 +15,7 @@ path = "src/main.rs"
 development-server = []
 
 [dependencies]
+magicmtn-local = { path = "../local" }
 magicmtn-provider-framework = { path = "../sdk/rust/magicmtn-provider-framework", features = ["host"] }
 magicmtn-sdk = { path = "../sdk/rust/magicmtn-sdk" }
 anyhow = "1"

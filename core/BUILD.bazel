@@ -8,7 +8,7 @@ exports_files(["Cargo.toml"])
 rust_library(
     name = "engine",
     srcs = glob(["src/**/*.rs"]),
-    compile_data = ["//:fixtures"] + glob(["data/**"]),
+    compile_data = ["//:fixtures"] + glob(["data/**", "migrations/*.sql", "sqlite_migrations/*.sql"]),
     crate_name = "magicmtn_engine",
     edition = "2021",
     proc_macro_deps = all_crate_deps(proc_macro = True),
