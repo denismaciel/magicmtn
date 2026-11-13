@@ -155,17 +155,19 @@ export default function magicmtn(pi) {
           let catalog;
           if (!action) {
             const account = await magic(["pi", "account"]);
-            if (account.signed_in) catalog = await magic(["pi", "catalog"]);
+            if (!account.signed_in) {
+              ctx.ui.notify("Run magic login in your terminal, then use /magic.", "info");
+              return;
+            }
+            catalog = await magic(["pi", "catalog"]);
             const defaultModel = catalog && (catalog.defaults.inference_source === "pi" && ctx.model
               ? { display_name: `Pi: ${ctx.model.name || ctx.model.id}` }
               : catalog.models.find((m) => m.id === catalog.defaults.model_id));
             const defaultLabel = defaultModel
               ? `Default (${defaultModel.display_name})`
               : "Default (configure model)";
-            const actions = account.signed_in
-                ? [defaultLabel, "View sandboxes", "New workspace", "Relay current directory", "Inference only", "Sign out"]
-                : ["Sign in"];
-            const selected = await select(ctx, account.signed_in ? `MagicMtn · ${account.user.display_name}` : "MagicMtn · Not signed in",
+            const actions = [defaultLabel, "View sandboxes", "New workspace", "Relay current directory", "Inference only"];
+            const selected = await select(ctx, `MagicMtn · ${account.user.display_name}`,
               actions.map((label) => ({ id: label })), (item) => item.id, false, states);
             if (selected === BACK || !selected) return;
             action = selected.id;
@@ -185,21 +187,6 @@ export default function magicmtn(pi) {
               ctx.ui.notify(`Workspace defaults saved: ${model.display_name}. Use /magic new to start a workspace, or /magic view to reconnect.`, "info");
               return;
             }
-          }
-          if (["logout", "Sign out"].includes(action)) {
-            if (!(await terminal(ctx, ["logout"]))) throw new Error("MagicMtn sign-out did not complete");
-            inference.clear();
-            pi.unregisterProvider("magicmtn");
-            ctx.ui.setStatus("magicmtn", undefined);
-            ctx.ui.setStatus("magicmtn-workspace", undefined);
-            ctx.ui.notify("Signed out of MagicMtn", "info");
-            return;
-          }
-          if (["login", "Sign in"].includes(action)) {
-            if (!(await terminal(ctx, ["login", "--client", "pi"]))) throw new Error("MagicMtn sign-in did not complete");
-            await refreshModels(ctx, await magic(["pi", "catalog"]));
-            ctx.ui.notify("Signed in to MagicMtn", "info");
-            return;
           }
           if (["inference", "Inference only"].includes(action)) {
             const catalog = await magic(["pi", "catalog"]);
@@ -258,7 +245,7 @@ export default function magicmtn(pi) {
               }
             }
           } else if (!["new", "New workspace", "relay", "Relay current directory"].includes(action)) {
-            ctx.ui.notify("Usage: /magic [default|view|new|relay|inference|login|logout]", "info");
+            ctx.ui.notify("Usage: /magic [default|view|new|relay|inference]", "info");
             return;
           }
           if (!workspace) {

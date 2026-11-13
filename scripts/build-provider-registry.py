@@ -81,7 +81,7 @@ def main():
     mxc = SOURCES / 'provider-microsoft-mxc'
     subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=mxc, check=True)
     version = tomllib.loads((mxc / 'Cargo.toml').read_text())['package']['version']
-    package('mxc', version, 'macos', 'aarch64', mxc / 'target/release/magicmtn-provider-mxc', mxc / 'LICENSE')
+    package('microsoft-mxc', version, 'macos', 'aarch64', mxc / 'target/release/magicmtn-provider-microsoft-mxc', mxc / 'LICENSE')
     build_linux('firecracker', ['x86_64', 'aarch64'])
     build_linux('nvx', ['x86_64'])
     print(OUT)

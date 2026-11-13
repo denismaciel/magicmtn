@@ -16,6 +16,7 @@ const workspace = { id: "d215125b-4896-4ca4-a36f-aefdeea095fb", provider: "exe",
 async function fixture(t, { image = true, workspaces = [], failCreate = false, interruptAttach = false, removeCliBeforeAttach = false, signedIn = true, models = [model], connections = [connection], defaults = {} } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "magicmtn-extension-"));
   const log = join(directory, "calls.jsonl");
+  writeFileSync(log, "");
   const accountPath = join(directory, "account.json");
   const catalogPath = join(directory, "catalog.json");
   const workspacesPath = join(directory, "workspaces.json");
@@ -33,8 +34,6 @@ async function fixture(t, { image = true, workspaces = [], failCreate = false, i
 import fs from 'node:fs';
 const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\\n');
 let result;
-if(args[0]==='login'){fs.writeFileSync(${JSON.stringify(accountPath)},JSON.stringify(${JSON.stringify(account)}));process.exit(0)}
-if(args[0]==='logout'){fs.writeFileSync(${JSON.stringify(accountPath)},JSON.stringify({signed_in:false}));process.exit(0)}
 if(args[1]==='attach'){if(${interruptAttach})process.kill(process.pid,'SIGTERM');process.exit(0)}
 if(args[1]==='connect')result={id:'pi-connection'};
 if(['status','stop','restart'].includes(args[1]))result={state:'running',generation:2};
@@ -49,7 +48,7 @@ console.log(JSON.stringify(result));`;
   writeFileSync(join(directory, "magic"), cli, { mode: 0o755 });
   writeFileSync(join(directory, "package.json"), '{"type":"module"}');
   t.after(() => { process.env.PATH = originalPath; rmSync(directory, { recursive: true, force: true }); });
-  const calls = () => readFileSync(log, "utf8").trim().split("\n").map(JSON.parse);
+  const calls = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
   const notices = [];
   const choices = [];
   const menus = [];
@@ -109,11 +108,11 @@ console.log(JSON.stringify(result));`;
   return { ctx, command, choices, menus, notices, terminalEvents, statuses, calls, handlers, provider: () => provider };
 }
 
-test("signed-in menu shows the account name and sign out only", async (t) => {
+test("signed-in menu shows the account name without authentication options", async (t) => {
   const f = await fixture(t);
   await f.command.handler("", f.ctx);
   assert.equal(f.menus[0].title, "MagicMtn · Rodrigo");
-  assert.ok(f.menus[0].items.includes("Sign out"));
+  assert.ok(!f.menus[0].items.includes("Sign out"));
   assert.ok(!f.menus[0].items.includes("Sign in"));
   assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"]]);
   assert.equal(f.menus[0].items[0], "Default (Model)");
@@ -166,27 +165,13 @@ test("Left from termination confirmation returns to sandbox actions, then to the
   assert.equal(f.menus[4].title, "Sandboxes");
   assert.deepEqual(f.calls(), [["pi", "list"], ["pi", "list"]]);
 });
-test("signed-out menu offers sign in and refreshes after login", async (t) => {
+test("signed-out menu directs users to the CLI without opening a picker", async (t) => {
   const f = await fixture(t, { signedIn: false });
-  f.choices.push("Sign in");
   await f.command.handler("", f.ctx);
-  assert.deepEqual(f.menus[0].items, ["Sign in"]);
-  await f.command.handler("", f.ctx);
-  assert.equal(f.menus[1].title, "MagicMtn · Rodrigo");
-  assert.ok(f.menus[1].items.includes("Sign out"));
-});
-test("sign out revokes CLI access, clears inference and updates the next menu", async (t) => {
-  const f = await fixture(t);
-  f.choices.push(0);
-  await f.command.handler("inference", f.ctx);
-  f.choices.push("Sign out");
-  await f.command.handler("", f.ctx);
-  assert.equal(f.provider(), undefined);
-  assert.equal(f.statuses.get("magicmtn"), undefined);
-  assert.equal(f.notices.at(-1).message, "Signed out of MagicMtn");
-  await f.command.handler("", f.ctx);
-  assert.deepEqual(f.menus.at(-1).items, ["Sign in"]);
-  assert.ok(f.calls().some((args) => args[0] === "logout"));
+  assert.deepEqual(f.menus, []);
+  assert.deepEqual(f.terminalEvents, []);
+  assert.deepEqual(f.calls(), [["pi", "account"]]);
+  assert.deepEqual(f.notices, [{ message: "Run magic login in your terminal, then use /magic.", type: "info" }]);
 });
 test("creates the default workspace without selection menus and hands the terminal to its real pi", async (t) => {
   const f = await fixture(t);
@@ -383,12 +368,15 @@ test("cancelling termination leaves the sandbox available without entering it", 
   assert.deepEqual(f.menus.at(-1).items, ["Enter/ssh", "Terminate", "Session status", "Stop agent", "Restart agent"]);
 });
 
-test("sign-in identifies pi to the browser handoff", async (t) => {
+test("authentication commands do not invoke the CLI or take over the terminal", async (t) => {
   const f = await fixture(t);
-  await f.command.handler("login", f.ctx);
-  assert.deepEqual(f.calls(), [["login", "--client", "pi"], ["pi", "catalog"]]);
-  assert.deepEqual(f.terminalEvents, ["stop", "start"]);
-  assert.equal(f.notices.at(-1).message, "Signed in to MagicMtn");
+  for (const action of ["login", "logout", "Sign in", "Sign out"]) {
+    await f.command.handler(action, f.ctx);
+    assert.equal(f.notices.at(-1).message, "Usage: /magic [default|view|new|relay|inference]");
+  }
+  assert.deepEqual(f.calls(), []);
+  assert.deepEqual(f.terminalEvents, []);
+  assert.deepEqual(f.menus, []);
 });
 
 for (const [label,command] of [["Session status","status"],["Stop agent","stop"],["Restart agent","restart"]]) {

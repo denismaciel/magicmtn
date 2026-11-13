@@ -24,7 +24,7 @@
       ]
     },
     {
-      "name": "mxc",
+      "name": "microsoft-mxc",
       "description": "Run local commands in isolated workspaces with Microsoft MXC.",
       "platforms": [
         "macos-aarch64"
