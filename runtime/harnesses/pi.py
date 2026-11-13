@@ -18,6 +18,10 @@ class PiHarness:
         model["baseUrl"] = endpoint
         atomic_json(self.directory / "models.json", {"providers": {"magicmtn": {
             "baseUrl": endpoint, "api": api, "apiKey": config["token"], "models": [model]}}})
+        settings_path = self.directory / "settings.json"
+        settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+        settings.update(defaultProvider="magicmtn", defaultModel=model["id"])
+        atomic_json(settings_path, settings)
         if config.get("workspace_extension"):
             extension = self.directory / "extensions" / "magicmtn-workspace"
             extension.mkdir(parents=True, exist_ok=True)
@@ -58,4 +62,6 @@ class PiHarness:
         return values
 
     def artifacts(self):
-        return self.sessions.glob("*.jsonl")
+        # Interactive Pi sessions use cwd-specific subdirectories. They share
+        # the runtime identity and synchronization with the supervised session.
+        return self.sessions.rglob("*.jsonl")

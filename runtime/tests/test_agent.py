@@ -33,7 +33,7 @@ class SupervisorTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.env = patch.dict(os.environ, {"HOME": self.directory.name})
         self.env.start()
-        self.config = {"session_id": str(uuid.uuid4()), "origin": "http://localhost:8081", "token": "scoped-runtime-only", "workspace": self.directory.name, "model": {"id": "test-model"}, "cols": 80, "rows": 24}
+        self.config = {"session_id": str(uuid.uuid4()), "origin": "http://localhost:8081", "token": "scoped-runtime-only", "integrations_origin": "https://control.magicmtn.test", "workspace": self.directory.name, "model": {"id": "test-model"}, "cols": 80, "rows": 24}
         self.supervisor = agent.Supervisor(self.config)
         self.thread = None
         self.control = {"generation": 1, "desired_state": "running"}
@@ -210,6 +210,20 @@ class SupervisorTests(unittest.TestCase):
         model = json.loads((self.supervisor.directory / "pi" / "models.json").read_text())
         self.assertEqual(model["providers"]["magicmtn"]["apiKey"], "scoped-runtime-only")
         self.assertEqual((self.supervisor.directory / "pi" / "models.json").stat().st_mode & 0o777, 0o600)
+
+    def test_shell_sessions_sync_without_colliding_with_the_managed_session(self):
+        sessions = self.supervisor.harness.sessions
+        shell = sessions / "shell-workspace"
+        shell.mkdir(parents=True)
+        (sessions / "conversation.jsonl").write_text('{"managed":true}\n')
+        (shell / "conversation.jsonl").write_text('{"shell":true}\n')
+        self.offline = False
+        self.run_supervisor("import time;time.sleep(30)")
+        wait_for(lambda: len(self.chunks) == 2)
+        self.assertEqual(set(self.chunks.values()), {b'{"managed":true}\n', b'{"shell":true}\n'})
+        # Resuming the supervised conversation ignores independent shell sessions.
+        self.assertEqual(self.supervisor.harness.command()[1:3],
+                         ["--session", str(sessions / "conversation.jsonl")])
 
     @unittest.skipUnless(os.environ.get("MAGICMTN_TEST_PI"), "set MAGICMTN_TEST_PI to pinned Pi 1.2 executable")
     def test_real_pi_tool_loop_history_resume_and_async_sync(self):

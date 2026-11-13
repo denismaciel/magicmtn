@@ -15,7 +15,7 @@ def run(*args, **kwargs):
 
 def runtime_sources(root):
     runtime = root / "runtime"
-    files = [runtime / "agent.py", runtime / "requirements.txt", runtime / "gh.py", runtime / "github.py", runtime / "mcp.js", runtime / "install.sh", *sorted((runtime / "harnesses").glob("*.py"))]
+    files = [*sorted(runtime.glob("*.py")), runtime / "requirements.txt", runtime / "mcp.js", runtime / "install.sh", *sorted((runtime / "harnesses").glob("*.py"))]
     return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
 
 
@@ -51,6 +51,7 @@ gh --version
 fd --version
 gh help > /tmp/gh-help.txt
 test -x /usr/local/bin/magicmtn-sandbox-agent
+test -x /usr/local/bin/magicmtn-shell
 test -x /usr/local/bin/magicmtn-git-credential
 /opt/magicmtn/venv/bin/python3 -c 'import websockets.sync.client; import sys; sys.path.insert(0, "/opt/magicmtn/runtime"); import agent; from harnesses.pi import PiHarness'
 pi --help > /tmp/pi-help.txt
@@ -65,11 +66,23 @@ python -m venv /workspace/project-venv
         smoke = smoke.replace("fd --version\n", "").replace("rg 'sandbox smoke test' /workspace/smoke-repo\n", "")
     run("podman", "run", *platform_options, "--rm", "--network", "none", "--cap-drop", "all",
         "--security-opt", "no-new-privileges", args.tag, "bash", "-euc", smoke)
+    fixture = {"session_id": str(uuid.uuid4()), "origin": "http://127.0.0.1:8080",
+               "integrations_origin": "http://127.0.0.1:8080", "token": "image-smoke-scoped-token",
+               "workspace_info": {"id": str(uuid.uuid4())},
+               "workspace_extension": (root / "interfaces/pi/workspace.js").read_text(),
+               "model": {"id": "smoke-model", "name": "Smoke Model", "reasoning": False,
+                         "input": ["text"], "contextWindow": 32768, "maxTokens": 4096,
+                         "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}}}
+    setup = "import os,sys;sys.path.insert(0,'/opt/magicmtn/runtime');from agent import Supervisor;"
+    setup += f"supervisor=Supervisor({fixture!r});supervisor.lock_file.close();"
+    setup += "os.execvp('pi',['pi','--mode','rpc','--no-session','--offline'])"
     rpc = run("podman", "run", *platform_options, "--interactive", "--rm", "--network", "none", args.tag,
-              "pi", "--mode", "rpc", "--no-session", input='{"id":"smoke-state","type":"get_state"}\n',
+              "python3", "-c", setup, input='{"id":"smoke-state","type":"get_state"}\n',
               text=True, stdout=subprocess.PIPE, timeout=30)
     responses = [json.loads(line) for line in rpc.stdout.splitlines() if line.startswith("{")]
     assert any(r.get("id") == "smoke-state" and r.get("success") is True for r in responses), "Pi RPC initialization failed"
+    state = next(r["data"] for r in responses if r.get("id") == "smoke-state")
+    assert state["model"]["provider"] == "magicmtn" and state["model"]["id"] == "smoke-model", "Shell Pi lost the sandbox inference configuration"
     name = "magicmtn-image-smoke-" + uuid.uuid4().hex[:12]
     try:
         run("podman", "run", *platform_options, "--detach", "--name", name, "--network", "none", args.tag,

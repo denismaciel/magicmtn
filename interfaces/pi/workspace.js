@@ -97,6 +97,7 @@ export default function workspaceStatus(pi) {
     const statusPath = join("/tmp", `magicmtn-relay-${workspace.id}.json`);
     let previous;
     let switching = false;
+    const supervised = process.env.MAGICMTN_RELAY_READY !== undefined;
     let awaitingRelay = process.env.MAGICMTN_RELAY_READY === "0";
     const refresh = () => {
       let status;
@@ -105,7 +106,7 @@ export default function workspaceStatus(pi) {
       if (state === "copying") awaitingRelay = true;
       // Pi binds its tools and project context at startup. The supervisor
       // resumes this session in the destination after a graceful shutdown.
-      if (state === "complete" && status.directory && (awaitingRelay || status.directory !== ctx.cwd)
+      if (supervised && state === "complete" && status.directory && (awaitingRelay || status.directory !== ctx.cwd)
         && !switching && ctx.isIdle() && !ctx.hasPendingMessages()) {
         switching = true;
         ctx.shutdown();

@@ -6,6 +6,8 @@
 !images/canonical/package-lock.json
 !runtime
 !runtime/agent.py
+!runtime/environment.py
+!runtime/launch.py
 !runtime/requirements.txt
 !runtime/github.py
 !runtime/gh.py

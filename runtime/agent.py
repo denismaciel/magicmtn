@@ -26,6 +26,7 @@ import urllib.error
 import urllib.request
 import uuid
 from harnesses.pi import PiHarness
+import environment as sandbox_environment
 
 LIMIT = 1024 * 1024
 CHUNK = 24 * 1024
@@ -58,11 +59,8 @@ class Supervisor:
         self.output_ready = threading.Event()
         self.errors = collections.Counter()
         self.command = self.configure()
-        if config.get("integrations_origin"):
-            atomic_json(self.directory / "integrations.json", {
-                "origin": config["integrations_origin"], "token": config["token"],
-                "github_enabled": config.get("github_enabled", True),
-                "ca_certificate": config.get("ca_certificate")})
+        self.runtime_environment = sandbox_environment.configure(
+            self.directory, self.config, self.harness.environment(), atomic_json)
 
     def configure(self):
         harness = self.config.get("harness", "pi")
@@ -74,35 +72,9 @@ class Supervisor:
         return ["pi"]
 
     def environment(self, relay_directory=None):
-        environment = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor")
-        environment.update(self.harness.environment())
+        environment = sandbox_environment.apply(self.runtime_environment)
+        environment.update(TERM="xterm-256color", COLORTERM="truecolor")
         environment["MAGICMTN_RELAY_READY"] = "1" if relay_directory else "0"
-        if self.config.get("integrations_origin"):
-            environment["MAGICMTN_INTEGRATIONS_CONFIG"] = str(self.directory / "integrations.json")
-        if self.config.get("integrations_origin") and self.config.get("github_enabled", True):
-            environment.pop("GH_TOKEN", None)
-            environment.pop("GITHUB_TOKEN", None)
-            # Git subprocesses from gh or Pi use only the MagicMtn gateway.
-            from urllib.parse import urlsplit
-            origin = urlsplit(self.config["integrations_origin"])
-            if origin.hostname:
-                gitconfig = self.directory / "gitconfig"
-                gitconfig.touch(mode=0o600)
-                environment["GIT_CONFIG_GLOBAL"] = str(gitconfig)
-                environment["GIT_CONFIG_NOSYSTEM"] = "1"
-                environment["GIT_CONFIG_COUNT"] = "5"
-                environment["GIT_CONFIG_KEY_0"] = f"credential.{origin.scheme}://{origin.netloc}.helper"
-                environment["GIT_CONFIG_VALUE_0"] = "!magicmtn-git-credential"
-                environment["GIT_CONFIG_KEY_1"] = "credential.useHttpPath"
-                environment["GIT_CONFIG_VALUE_1"] = "true"
-                gateway = self.config["integrations_origin"].rstrip("/") + "/"
-                for index, source in enumerate(("https://github.com/", "git@github.com:", "ssh://git@github.com/"), start=2):
-                    environment[f"GIT_CONFIG_KEY_{index}"] = f"url.{gateway}.insteadOf"
-                    environment[f"GIT_CONFIG_VALUE_{index}"] = source
-        if self.config.get("ca_certificate"):
-            certificate = self.directory / "control-plane-ca.pem"
-            certificate.write_text(self.config["ca_certificate"])
-            environment["NODE_EXTRA_CA_CERTS"] = str(certificate)
         return environment
 
     def start_child(self):
@@ -408,7 +380,8 @@ class Supervisor:
                     self.request("/v1/harness/agent/renew")
                     renewed = time.monotonic()
                 for path in self.harness.artifacts():
-                    file_id = hashlib.sha256(path.name.encode()).hexdigest()
+                    relative = path.relative_to(self.harness.sessions).as_posix()
+                    file_id = hashlib.sha256(relative.encode()).hexdigest()
                     offset = offsets.get(file_id, 0)
                     with path.open("rb") as source:
                         source.seek(offset)

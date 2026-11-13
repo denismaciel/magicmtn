@@ -7,9 +7,14 @@ import workspaceStatus from "../workspace.js";
 
 const hasDots = (line) => /[\u2801-\u28ff]/u.test(line);
 
-function fixture(t, { mode = "tui", sandbox = true, rows = 40, initialText = "", entries = [], headerRows = 8, nested = false, previousEditor } = {}) {
+function fixture(t, { mode = "tui", sandbox = true, supervised = true, rows = 40, initialText = "", entries = [], headerRows = 8, nested = false, previousEditor } = {}) {
   const previous = process.env.MAGICMTN_WORKSPACE_INFO;
+  const previousRelay = process.env.MAGICMTN_RELAY_READY;
+  if (supervised) process.env.MAGICMTN_RELAY_READY ??= "1";
+  else delete process.env.MAGICMTN_RELAY_READY;
   t.after(() => {
+    if (previousRelay === undefined) delete process.env.MAGICMTN_RELAY_READY;
+    else process.env.MAGICMTN_RELAY_READY = previousRelay;
     if (previous === undefined) delete process.env.MAGICMTN_WORKSPACE_INFO;
     else process.env.MAGICMTN_WORKSPACE_INFO = previous;
   });
@@ -416,6 +421,15 @@ test("completed relay in the current directory does not restart Pi", (t) => {
   const f = fixture(t);
   assert.equal(f.shutdowns(), 0);
   assert.equal(f.widgets.has("magicmtn-relay"), false);
+});
+
+test("shell-launched Pi stays open when another session's relay completes", (t) => {
+  const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
+  t.after(() => rmSync(status, { force: true }));
+  writeFileSync(status, JSON.stringify({ state: "complete", directory: "/workspace/copied-repo" }));
+  const f = fixture(t, { supervised: false });
+  f.emit("session_start");
+  assert.equal(f.shutdowns(), 0);
 });
 
 for (const completesBeforeStartup of [false, true]) {

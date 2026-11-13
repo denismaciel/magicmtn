@@ -1,0 +1,41 @@
+name: Sandbox runtime parity
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/**'
+      - 'interfaces/pi/**'
+      - 'images/canonical/**'
+      - 'scripts/build-canonical-image.py'
+      - '.github/workflows/sandbox-runtime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/**'
+      - 'interfaces/pi/**'
+      - 'images/canonical/**'
+      - 'scripts/build-canonical-image.py'
+      - '.github/workflows/sandbox-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r runtime/requirements.txt
+      - run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+        working-directory: images/canonical
+      - run: python3 -m unittest discover -s runtime/tests
+      - name: Verify real Pi inference and MCP parity
+        run: MAGICMTN_TEST_PI="$GITHUB_WORKSPACE/images/canonical/node_modules/.bin/pi" python3 -m unittest discover -s runtime/tests -p test_environment.py
