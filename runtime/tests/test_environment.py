@@ -130,7 +130,8 @@ class EnvironmentTests(unittest.TestCase):
             ([sys.executable, str(RUNTIME / "launch.py"), binary, "--approve"], dict(os.environ)),
         ):
             result = subprocess.run(command + ["--mode", "json", "--offline", "-p", "List MCP services."],
-                                    cwd=self.home.name, env=values, capture_output=True, text=True, timeout=40)
+                                    cwd=self.home.name, env=values, stdin=subprocess.DEVNULL,
+                                    capture_output=True, text=True, timeout=40)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Sandbox parity verified.", result.stdout)
             self.assertNotIn("Failed to load extension", result.stderr)
