@@ -1,0 +1,14 @@
+exports_files([
+    "Cargo.toml",
+    "Cargo.lock",
+    "Cargo.Bazel.lock",
+])
+
+filegroup(
+    name = "fixtures",
+    srcs = glob([
+        "tests/fixtures/**",
+        "registry/*.json",
+    ]),
+    visibility = ["//visibility:public"],
+)

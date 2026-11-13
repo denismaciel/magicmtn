@@ -1,0 +1,40 @@
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+rust_library(
+    name = "sdk",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "magicmtn_sdk",
+    edition = "2021",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    version = "0.1.0",
+    deps = all_crate_deps(normal = True),
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":sdk",
+)
+
+rust_doc_test(
+    name = "doc_tests",
+    crate = ":sdk",
+)
+
+[
+    rust_test(
+        name = name + "_test",
+        srcs = ["tests/" + name + ".rs"],
+        compile_data = glob(["tests/fixtures/*.json"]),
+        edition = "2021",
+        deps = [":sdk"] + all_crate_deps(normal = True),
+    )
+    for name in [
+        "wire",
+        "search_engine",
+    ]
+]

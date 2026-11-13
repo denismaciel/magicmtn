@@ -1,0 +1,28 @@
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+rust_library(
+    name = "engine",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["//:fixtures"] + glob(["data/**"]),
+    crate_name = "magicmtn_engine",
+    edition = "2021",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    version = "0.1.0",
+    deps = [
+        "//sdk/rust/magicmtn-contracts:contracts",
+        "//sdk/rust/magicmtn-provider-framework:provider_framework",
+        "//sdk/rust/magicmtn-sdk:sdk",
+    ] + all_crate_deps(normal = True),
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":engine",
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+    deps = all_crate_deps(normal_dev = True),
+)

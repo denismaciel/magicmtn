@@ -45,6 +45,15 @@ visible in Pi, with details in the local transfer log printed during connection.
 
 ## Development
 
+Run the engine and SDK tests with [Bazelisk](https://github.com/bazelbuild/bazelisk#installation):
+
+```sh
+bazel test //...
+```
+
+See [the Bazel guide](docs/bazel.md) for reusable targets and cross-repository builds.
+For Cargo development:
+
 ```sh
 cargo check --workspace --all-targets --locked
 cargo test --workspace --lib --locked
