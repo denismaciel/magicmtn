@@ -78,6 +78,10 @@ def main():
     subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=apple, check=True)
     version = tomllib.loads((apple / 'Cargo.toml').read_text())['package']['version']
     package('apple-container', version, 'macos', 'aarch64', apple / 'target/release/magicmtn-provider-apple-container', apple / 'LICENSE')
+    mxc = SOURCES / 'provider-microsoft-mxc'
+    subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=mxc, check=True)
+    version = tomllib.loads((mxc / 'Cargo.toml').read_text())['package']['version']
+    package('mxc', version, 'macos', 'aarch64', mxc / 'target/release/magicmtn-provider-mxc', mxc / 'LICENSE')
     build_linux('firecracker', ['x86_64', 'aarch64'])
     build_linux('nvx', ['x86_64'])
     print(OUT)

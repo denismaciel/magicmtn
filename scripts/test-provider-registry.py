@@ -87,6 +87,85 @@ class RegistryReleaseTests(unittest.TestCase):
                     publisher.publish(index, {}, {'providers': []})
             self.assertEqual([call.args[1] for call in aws.call_args_list], ['put-object'])
 
+    def test_selected_provider_requires_only_its_approved_platforms(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog = {'providers': [
+                {'name': 'firecracker', 'description': 'test', 'platforms': ['linux-aarch64']},
+                {'name': 'unreleased', 'platforms': ['linux-x86_64']},
+            ]}
+            (root / 'registry').mkdir()
+            (root / 'registry/providers.json').write_text(json.dumps(catalog))
+            package = self.package(root)
+            with patch.object(publisher, 'ROOT', root):
+                index, uploads = publisher.prepare([package], root / 'out', providers=['firecracker'])
+                self.assertEqual([p['name'] for p in json.loads(index.read_text())['providers']], ['firecracker'])
+                self.assertEqual(len(uploads), 1)
+                with self.assertRaisesRegex(ValueError, 'not approved'):
+                    publisher.prepare([package], root / 'out', providers=['unknown'])
+                with self.assertRaisesRegex(ValueError, 'not approved'):
+                    publisher.prepare([package], root / 'out', providers=['unreleased'])
+
+    def test_selected_publication_preserves_existing_providers_and_objects(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            index = root / 'index.json'
+            release = {'name': 'mxc', 'version': '0.1.0', 'platforms': {'macos-aarch64': {'sha256': 'new'}}}
+            previous = {'name': 'apple-container', 'version': '0.1.2', 'platforms': {'macos-aarch64': {'sha256': 'old'}}}
+            index.write_text(json.dumps({'schema_version': 1, 'providers': [release]}))
+            calls = []
+            def get(command, **kwargs):
+                Path(command[command.index('index.json') + 1]).write_text(json.dumps({'schema_version': 1, 'providers': [previous]}))
+                return publisher.subprocess.CompletedProcess(command, 0, stdout='{"ETag":"original"}')
+            def aws(*args):
+                calls.append(args)
+                if args[args.index('--key') + 1] == 'index.json':
+                    written = json.loads(Path(args[args.index('--body') + 1]).read_text())
+                    self.assertEqual(written['providers'], [previous, release])
+                    self.assertEqual(args[args.index('--if-match') + 1], 'original')
+                return '{}'
+            metadata = {'providers': [release]}
+            with patch.object(publisher.subprocess, 'run', side_effect=get), \
+                    patch.object(publisher, 'aws', side_effect=aws), \
+                    patch.object(publisher, 'record_publication') as record:
+                publisher.publish(index, {'providers/mxc/0.1.0/macos-aarch64.tar.gz': root / 'package'},
+                                  metadata, preserve_existing=True)
+            self.assertEqual([call[1] for call in calls], ['put-object', 'put-object'])
+            self.assertEqual(record.call_args_list[0].args[0], metadata)
+            self.assertEqual(record.call_args_list[1].args[0], metadata)
+
+    def test_same_version_cannot_change_archive_even_if_executable_matches(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            index = root / 'index.json'
+            old = {'name': 'mxc', 'version': '0.1.0', 'platforms': {
+                'macos-aarch64': {'sha256': 'old-archive', 'executable_sha256': 'same-executable'}}}
+            new = json.loads(json.dumps(old))
+            new['platforms']['macos-aarch64']['sha256'] = 'new-archive'
+            index.write_text(json.dumps({'schema_version': 1, 'providers': [new]}))
+            def get(command, **kwargs):
+                Path(command[command.index('index.json') + 1]).write_text(json.dumps({'schema_version': 1, 'providers': [old]}))
+                return publisher.subprocess.CompletedProcess(command, 0, stdout='{"ETag":"original"}')
+            with patch.object(publisher.subprocess, 'run', side_effect=get), \
+                    patch.object(publisher, 'aws') as aws, patch.object(publisher, 'record_publication'):
+                with self.assertRaisesRegex(ValueError, 'increment provider version'):
+                    publisher.publish(index, {}, {'providers': [new]}, preserve_existing=True)
+            aws.assert_not_called()
+
+    def test_index_conflict_prevents_database_commit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            index = Path(temporary) / 'index.json'
+            index.write_text('{"schema_version":1,"providers":[]}')
+            missing = publisher.subprocess.CalledProcessError(1, 'aws', stderr='NoSuchKey')
+            conflict = publisher.subprocess.CalledProcessError(1, 'aws', stderr='PreconditionFailed')
+            with patch.object(publisher.subprocess, 'run', side_effect=missing), \
+                    patch.object(publisher, 'aws', side_effect=conflict), \
+                    patch.object(publisher, 'record_publication') as record:
+                with self.assertRaises(publisher.subprocess.CalledProcessError):
+                    publisher.publish(index, {}, {'providers': []}, preserve_existing=True)
+            self.assertEqual(record.call_count, 1)
+            self.assertTrue(record.call_args.kwargs['check'])
+
 
 if __name__ == '__main__':
     unittest.main()

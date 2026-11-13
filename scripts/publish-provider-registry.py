@@ -50,11 +50,15 @@ def inspect_package(path):
         return manifest
 
 
-def prepare(paths, output):
+def prepare(paths, output, providers=None):
     catalog = json.loads((ROOT / 'registry/providers.json').read_text())
     approved = {entry['name']: entry for entry in catalog['providers']}
     if len(approved) != len(catalog['providers']) or any(not re.fullmatch('[a-z][a-z0-9-]{0,63}', name) for name in approved):
         raise ValueError('Registry names must be valid and globally unique')
+    if providers is not None:
+        if not providers or not set(providers) <= approved.keys():
+            raise ValueError('selected provider is not approved for the Registry')
+        approved = {name: entry for name, entry in approved.items() if name in providers}
     releases = {}
     uploads = {}
     for path in paths:
@@ -111,8 +115,10 @@ def record_publication(metadata, publisher, check=False):
         subprocess.run(command, check=True)
 
 
-def publish(index, uploads, metadata, publisher='magicmtn-publish-provider'):
+def publish(index, uploads, metadata, publisher='magicmtn-publish-provider', preserve_existing=False):
     record_publication(metadata, publisher, check=True)
+    candidate = json.loads(index.read_text())
+    publication_index = index
     # Conditional publication serializes maintainers and protects immutable versions.
     condition = ['--if-none-match', '*']
     with tempfile.TemporaryDirectory() as temporary:
@@ -124,23 +130,34 @@ def publish(index, uploads, metadata, publisher='magicmtn-publish-provider'):
                 raise
         else:
             condition = ['--if-match', json.loads(result.stdout)['ETag']]
-            previous = {entry['name']: entry for entry in json.loads(previous_path.read_text())['providers']}
-            for release in json.loads(index.read_text())['providers']:
+            previous_index = json.loads(previous_path.read_text())
+            previous = {entry['name']: entry for entry in previous_index['providers']}
+            if previous_index.get('schema_version') != 1 or len(previous) != len(previous_index['providers']):
+                raise ValueError('invalid existing Registry index')
+            for release in candidate['providers']:
                 old = previous.get(release['name'])
                 if old and old['version'] == release['version']:
-                    for platform, artifact in release['platforms'].items():
-                        if platform in old['platforms'] and old['platforms'][platform]['executable_sha256'] != artifact['executable_sha256']:
-                            raise ValueError('increment provider version before changing a published executable')
+                    if old['platforms'] != release['platforms']:
+                        raise ValueError('increment provider version before changing published artifacts')
+            if preserve_existing:
+                previous.update((release['name'], release) for release in candidate['providers'])
+                publication_index = index.with_name('publication-index.json')
+                publication_index.write_text(json.dumps({
+                    'schema_version': 1, 'providers': list(previous.values())
+                }, indent=2) + '\n')
     # One complete index is the commit point; old binaries are removed afterward.
     for key, path in uploads.items():
         aws('s3api', 'put-object', '--bucket', BUCKET, '--key', key, '--body', str(path),
             '--content-type', 'application/gzip', '--cache-control', 'no-cache')
-    aws('s3api', 'put-object', '--bucket', BUCKET, '--key', 'index.json', '--body', str(index),
+    aws('s3api', 'put-object', '--bucket', BUCKET, '--key', 'index.json', '--body', str(publication_index),
         '--content-type', 'application/json', '--cache-control', 'no-cache', *condition)
     # A failed database write fails publication and leaves artifacts for a retry.
     # Record only after the conditional S3 commit succeeds. Cleanup follows both
     # commits. Maintainer publications must run serially across these two stores.
     record_publication(metadata, publisher)
+    if preserve_existing:
+        print(f'Published {len(uploads)} platform builds; retained existing providers and artifacts.')
+        return
     listing = json.loads(aws('s3api', 'list-objects-v2', '--bucket', BUCKET, '--prefix', 'providers/'))
     obsolete = [obj['Key'] for obj in listing.get('Contents', []) if obj['Key'] not in uploads]
     for offset in range(0, len(obsolete), 1000):
@@ -157,20 +174,21 @@ def main():
     parser.add_argument('--publish', action='store_true')
     parser.add_argument('--documentation', type=Path, required=True)
     parser.add_argument('--registry-publisher', default='magicmtn-publish-provider')
+    parser.add_argument('--provider', action='append', help='Publish only this approved provider; preserve all other providers and existing artifacts')
     parser.add_argument('--import-index', type=Path, help='Record an existing Registry index in the backend without uploading or deleting artifacts')
     args = parser.parse_args()
     if args.import_index:
-        if args.packages or args.publish:
-            parser.error('--import-index cannot be combined with packages or --publish')
+        if args.packages or args.publish or args.provider:
+            parser.error('--import-index cannot be combined with packages, --publish, or --provider')
         record_publication(publication(args.import_index, args.documentation), args.registry_publisher)
         return
     if not args.packages:
         parser.error('packages are required')
-    index, uploads = prepare(args.packages, ROOT / 'dist/registry/release')
+    index, uploads = prepare(args.packages, ROOT / 'dist/registry/release', providers=args.provider)
     metadata = publication(index, args.documentation)
     print(index)
     if args.publish:
-        publish(index, uploads, metadata, args.registry_publisher)
+        publish(index, uploads, metadata, args.registry_publisher, preserve_existing=bool(args.provider))
 
 
 if __name__ == '__main__':
