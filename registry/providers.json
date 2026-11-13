@@ -15,6 +15,13 @@
         "linux-x86_64",
         "linux-aarch64"
       ]
+    },
+    {
+      "name": "nvx",
+      "description": "Run bounded commands in local Linux microVM sandboxes with Microsoft NVX.",
+      "platforms": [
+        "linux-x86_64"
+      ]
     }
   ]
 }
