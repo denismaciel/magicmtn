@@ -2,7 +2,8 @@
 //! for the response; stderr is diagnostic and must never contain secrets.
 use crate::{
     ExecResult, InferenceDeployment, InferenceDeploymentRef, InferenceDeploymentSpec,
-    InferenceRequest, InferenceResponse, ProviderSandbox, ScpDirection,
+    InferenceRequest, InferenceResponse, ProviderSandbox, ScpDirection, SearchRequest,
+    SearchResponse,
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +35,9 @@ pub enum InferenceDeploymentOperation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Capabilities {
+    /// Advertises web search through `SearchEngineBackend`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub search: bool,
     pub inference_tasks: Vec<String>,
     /// Optional v1 extension. Omitted for inference-only and older providers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -47,6 +51,7 @@ pub struct Capabilities {
 impl Capabilities {
     pub fn sandbox(operations: Vec<SandboxOperation>) -> Self {
         Self {
+            search: false,
             inference_tasks: vec![],
             inference_deployment_operations: vec![],
             sandbox_operations: operations,
@@ -58,6 +63,7 @@ impl Capabilities {
     }
     pub fn inference(tasks: Vec<String>) -> Self {
         Self {
+            search: false,
             inference_tasks: tasks,
             inference_deployment_operations: vec![],
             sandbox_operations: vec![],
@@ -65,6 +71,12 @@ impl Capabilities {
             observe: false,
             evaluate: false,
             deploy: false,
+        }
+    }
+    pub fn search() -> Self {
+        Self {
+            search: true,
+            ..Self::inference(vec![])
         }
     }
     pub fn with_inference_deployments(
@@ -76,6 +88,7 @@ impl Capabilities {
     }
     pub fn supports(&self, operation: &Operation) -> bool {
         match operation {
+            Operation::Search { .. } => self.search,
             Operation::Describe | Operation::Shutdown => true,
             Operation::SandboxCreate { .. } => {
                 self.sandbox_operations.contains(&SandboxOperation::Create)
@@ -118,6 +131,10 @@ impl Capabilities {
     }
 }
 
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderManifest {
@@ -140,6 +157,9 @@ pub struct Request {
 pub enum Operation {
     Describe,
     Shutdown,
+    Search {
+        request: SearchRequest,
+    },
     SandboxCreate {
         template: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -195,6 +215,7 @@ pub enum Operation {
 impl Operation {
     pub fn kind(&self) -> &'static str {
         match self {
+            Self::Search { .. } => "search",
             Self::Describe => "describe",
             Self::Shutdown => "shutdown",
             Self::SandboxCreate { .. } => "sandbox_create",
@@ -289,6 +310,7 @@ pub enum Outcome {
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum Value {
     Description(ProviderManifest),
+    Search(SearchResponse),
     Sandbox(ProviderSandbox),
     SandboxStatus(crate::SandboxState),
     Inference(InferenceResponse),

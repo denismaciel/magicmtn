@@ -1,6 +1,44 @@
 use magicmtn_sdk::plugin::{Operation, Outcome, Request, Response, Value, PROTOCOL_VERSION};
 
 #[test]
+fn search_extension_preserves_legacy_manifests_and_negotiates_typed_results() {
+    use magicmtn_sdk::plugin::Capabilities;
+    use magicmtn_sdk::{SearchRequest, SearchResponse, SearchResult};
+
+    let golden: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/manifest_response_v1.json")).unwrap();
+    let response: Response = serde_json::from_value(golden.clone()).unwrap();
+    let Outcome::Ok(Value::Description(manifest)) = &response.outcome else {
+        panic!("manifest expected");
+    };
+    let operation = Operation::Search {
+        request: SearchRequest::new("Rust async"),
+    };
+    assert!(!manifest.capabilities.supports(&operation));
+    assert_eq!(serde_json::to_value(response).unwrap(), golden);
+    assert!(Capabilities::search().supports(&operation));
+    assert!(!Capabilities::inference(vec![]).supports(&operation));
+    assert_eq!(operation.kind(), "search");
+    let wire = serde_json::to_value(operation).unwrap();
+    assert_eq!(wire["name"], "search");
+    let decoded: Operation = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
+    let response = SearchResponse {
+        results: vec![SearchResult {
+            url: "https://doc.rust-lang.org/book/".into(),
+            title: "Rust".into(),
+            content: "Source excerpt".into(),
+        }],
+    };
+    let wire = serde_json::to_value(Value::Search(response.clone())).unwrap();
+    assert_eq!(wire["kind"], "search");
+    let Value::Search(decoded) = serde_json::from_value(wire).unwrap() else {
+        panic!("search response expected");
+    };
+    assert_eq!(decoded, response);
+}
+
+#[test]
 fn sandbox_status_is_negotiated_and_has_typed_results() {
     use magicmtn_sdk::{
         plugin::{Capabilities, SandboxOperation},

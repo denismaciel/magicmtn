@@ -4,12 +4,32 @@ use magicmtn_sdk::plugin::{
     Capabilities, ErrorCode, Operation, Outcome, ProviderError, ProviderManifest, Request,
     Response, Value, MANIFEST_VERSION, PROTOCOL_VERSION,
 };
-use magicmtn_sdk::{BoxFuture, InferenceBackend, InferenceDeploymentBackend, SandboxBackend};
+use magicmtn_sdk::{
+    BoxFuture, InferenceBackend, InferenceDeploymentBackend, SandboxBackend, SearchEngineBackend,
+};
 use std::{
     io::{BufRead, Read, Write},
     path::Path,
 };
 pub const MAX_MESSAGE_BYTES: u64 = 1024 * 1024;
+
+/// Serve web search requests from a persistent provider process.
+pub async fn run_search(
+    provider: &str,
+    version: &str,
+    backend: impl SearchEngineBackend,
+) -> Result<()> {
+    let backend = &backend;
+    serve(provider, version, Capabilities::search(), |operation| {
+        Box::pin(async move {
+            match operation {
+                Operation::Search { request } => backend.search(&request).await.map(Value::Search),
+                _ => Err(anyhow!("unsupported search operation")),
+            }
+        })
+    })
+    .await
+}
 
 async fn serve<'a>(
     provider: &str,
