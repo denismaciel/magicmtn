@@ -43,6 +43,10 @@ the transfer completes. Pi opens without waiting for the upload and
 shows a temporary copying notice until the files arrive. Transfer failures stay
 visible in Pi, with details in the local transfer log printed during connection.
 
+## Run locally
+
+Run a single-user server and Apple Container sandboxes using your own machine and bundled SQLite. Follow [Run MagicMtn locally](docs/local-server.md) to install the provider, start the server, and execute commands in a sandbox.
+
 ## Development
 
 Run the engine and SDK tests with [Bazelisk](https://github.com/bazelbuild/bazelisk#installation):
@@ -59,4 +63,4 @@ cargo check --workspace --all-targets --locked
 cargo test --workspace --lib --locked
 ```
 
-The Rust workspace contains the shared engine, provider SDK, CLI, and sandbox runtime. The CLI currently connects to MagicMtn Cloud; local server startup is not available yet.
+The Rust workspace contains the shared engine, provider SDK, CLI, local server, and sandbox runtime. MagicMtn Cloud consumes the same engine and sandbox API.
