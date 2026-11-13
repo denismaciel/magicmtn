@@ -178,10 +178,12 @@ pub async fn run(api: &Api, command: Commands) -> Result<()> {
             let mut file = tempfile::NamedTempFile::new_in(
                 path.parent().context("preferences directory missing")?,
             )?;
-            serde_json::to_writer(
-                &mut file,
-                &json!({"model_id":model,"inference_source":if use_pi{"pi"}else{"magicmtn"}}),
-            )?;
+            let mut defaults =
+                json!({"model_id":model,"inference_source":if use_pi{"pi"}else{"magicmtn"}});
+            if let Some(connection) = catalog["defaults"].get("pi_connection_id") {
+                defaults["pi_connection_id"] = connection.clone();
+            }
+            serde_json::to_writer(&mut file, &defaults)?;
             file.flush()?;
             file.as_file().sync_all()?;
             file.persist(path).context("saving workspace defaults")?;
@@ -208,8 +210,22 @@ pub async fn run(api: &Api, command: Commands) -> Result<()> {
             ensure!(input.len() <= 32768, "connection input too large");
             let value: Value =
                 serde_json::from_str(&input).context("expected model and api_key JSON on stdin")?;
-            api.request(Method::POST, "v1/pi/inference-connections", Some(value))
-                .await?
+            let connection = api
+                .request(Method::POST, "v1/pi/inference-connections", Some(value))
+                .await?;
+            let catalog = catalog(api).await?;
+            let path = defaults_path(api, &catalog)?;
+            let mut defaults = catalog["defaults"].clone();
+            defaults["pi_connection_id"] = connection["id"].clone();
+            let mut file = tempfile::NamedTempFile::new_in(
+                path.parent().context("preferences directory missing")?,
+            )?;
+            serde_json::to_writer(&mut file, &defaults)?;
+            file.flush()?;
+            file.as_file().sync_all()?;
+            file.persist(path)
+                .context("saving connected Pi inference")?;
+            connection
         }
         Commands::Connections => {
             api.request(Method::GET, "v1/gateway-inference-connections", None)
@@ -308,6 +324,9 @@ async fn catalog(api: &Api) -> Result<Value> {
         Err(error) => return Err(error).context("reading workspace defaults"),
     };
     if let Some(saved) = saved {
+        if let Some(connection) = saved.get("pi_connection_id") {
+            catalog["defaults"]["pi_connection_id"] = connection.clone();
+        }
         catalog["defaults"]["inference_source"] = saved
             .get("inference_source")
             .cloned()
@@ -320,6 +339,35 @@ async fn catalog(api: &Api) -> Result<Value> {
         }
     }
     Ok(catalog)
+}
+
+pub(crate) async fn managed_creation_body(
+    api: &Api,
+    model: Option<Uuid>,
+    pi_connection: Option<Uuid>,
+    key: Uuid,
+) -> Result<Value> {
+    let mut body = json!({"idempotency_key": key});
+    if let Some(model) = model {
+        body["model_id"] = json!(model);
+    } else if let Some(connection) = pi_connection {
+        body["pi_connection_id"] = json!(connection);
+    } else {
+        let catalog = catalog(api).await?;
+        let defaults = &catalog["defaults"];
+        if defaults["inference_source"] == "pi" {
+            let connection: Uuid = serde_json::from_value(defaults["pi_connection_id"].clone())
+                .context(
+                "Connect your Pi inference with /magic new, or select --model or --pi-connection",
+            )?;
+            body["pi_connection_id"] = json!(connection);
+        } else {
+            let model: Uuid = serde_json::from_value(defaults["model_id"].clone())
+                .context("Select an available inference model with /magic default or --model")?;
+            body["model_id"] = json!(model);
+        }
+    }
+    crate::configuration::creation_body(api, body)
 }
 struct Terminal;
 impl Terminal {

@@ -28,7 +28,11 @@ async fn sandbox_uses_server_access_even_with_missing_or_stale_cached_plan() {
         let app = Router::new().fallback(move |request: Request| {
             let recorded = recorded.clone();
             async move {
-                assert!(request.uri().path().starts_with("/v1/sandbox"));
+                let catalog = request.uri().path() == "/v1/pi/catalog";
+                assert!(catalog || request.uri().path().starts_with("/v1/sandbox"));
+                if catalog && backend_allowed {
+                    return Json(json!({"scope":{"organization_id":"11111111-1111-4111-8111-111111111111","user_id":"22222222-2222-4222-8222-222222222222"},"defaults":{"model_id":"33333333-3333-4333-8333-333333333333"}})).into_response();
+                }
                 assert_eq!(request.headers()["authorization"], "Bearer test-session");
                 if request.method() == axum::http::Method::POST
                     && matches!(

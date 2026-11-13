@@ -11,6 +11,15 @@ import unittest
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.server.created = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        response = ({"id": "00000000-0000-4000-8000-000000000009"}
+                    if self.path == "/v1/pi/inference-connections" else self.server.created)
+        self.wfile.write(json.dumps(response).encode())
+
     def log_message(self, *args):
         pass
 
@@ -49,6 +58,10 @@ class DefaultsTest(unittest.TestCase):
                     return json.loads(result.stdout) if success else None
 
                 call("defaults", "--model", other_model)
+                result = subprocess.run([binary, "--server-url", base, "sandbox", "new"],
+                                        env=dict(os.environ, HOME=home), capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(server.created["model_id"], other_model)
                 self.assertEqual(call("catalog")["defaults"], {"model_id": other_model, "inference_source": "magicmtn"})
                 self.assertEqual(next(directory.glob("defaults-*.json")).stat().st_mode & 0o777, 0o600)
                 call("defaults", "--model", replacement, success=False)
@@ -62,6 +75,23 @@ class DefaultsTest(unittest.TestCase):
                 self.assertEqual(call("catalog")["defaults"], {"model_id": model, "inference_source": "magicmtn"})
                 server.catalog["scope"]["user_id"] = other_user
                 self.assertEqual(call("catalog")["defaults"], {"model_id": model})
+                # A connected Pi default is shared with terminal sandbox creation,
+                # without persisting its upstream API key on the client.
+                call("defaults", "--use-pi")
+                connected = subprocess.run([binary, "--server-url", base, "pi", "connect"],
+                                          input=json.dumps({"model": {"id": "native"}, "api_key": "test-upstream-key"}),
+                                          env=dict(os.environ, HOME=home), capture_output=True, text=True)
+                self.assertEqual(connected.returncode, 0, connected.stderr)
+                call("defaults", "--model", model)
+                call("defaults", "--use-pi")
+                result = subprocess.run([binary, "--server-url", base, "sandbox", "new"],
+                                        env=dict(os.environ, HOME=home), capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(server.created["pi_connection_id"], "00000000-0000-4000-8000-000000000009")
+                self.assertNotIn("model_id", server.created)
+                for preferences in directory.glob("defaults-*.json"):
+                    self.assertNotIn("test-upstream-key", preferences.read_text())
+                    self.assertEqual(preferences.stat().st_mode & 0o777, 0o600)
                 server.catalog["scope"]["user_id"] = user
                 server.catalog["scope"]["organization_id"] = other_user
                 self.assertEqual(call("catalog")["defaults"], {"model_id": model})

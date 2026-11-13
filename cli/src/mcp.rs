@@ -115,7 +115,7 @@ async fn call(api: &Api, name: &str, args: &Value) -> Result<Value> {
                 }
                 None => uuid::Uuid::new_v4(),
             };
-            let record = api.request(Method::POST, "v1/sandboxes/managed", Some(crate::configuration::creation_body(api, json!({"idempotency_key":key}))?)).await
+            let record = api.request(Method::POST, "v1/sandboxes/managed", Some(crate::pi::managed_creation_body(api, None, None, key).await?)).await
                 .with_context(|| format!("Creation intent {key}; inspect sandbox_show with this ID before retrying. Reuse idempotency_key {key} for the same intent"))?;
             Ok(summary(&record))
         }
@@ -281,7 +281,12 @@ mod tests {
     }
     #[tokio::test]
     async fn bridge_preserves_auth_execution_results_and_creation_identity() {
-        use axum::{extract::State, http::HeaderMap, routing::post, Json, Router};
+        use axum::{
+            extract::State,
+            http::HeaderMap,
+            routing::{get, post},
+            Json, Router,
+        };
         use std::sync::{Arc, Mutex};
         let requests = Arc::new(Mutex::new(Vec::<Value>::new()));
         async fn handler(
@@ -302,6 +307,9 @@ mod tests {
             }
         }
         let app = Router::new()
+            .route("/v1/pi/catalog", get(|| async {
+                Json(json!({"scope":{"organization_id":"11111111-1111-4111-8111-111111111111","user_id":"22222222-2222-4222-8222-222222222222"},"defaults":{"model_id":"33333333-3333-4333-8333-333333333333"}}))
+            }))
             .route("/v1/sandboxes/managed", post(handler))
             .route("/v1/sandboxes/abc/exec", post(handler))
             .with_state(requests.clone());
@@ -323,6 +331,7 @@ mod tests {
             .contains("remote stdout"));
         let log = requests.lock().unwrap();
         assert_eq!(log[0]["idempotency_key"], key.to_string());
+        assert_eq!(log[0]["model_id"], "33333333-3333-4333-8333-333333333333");
         assert_eq!(log[1]["command"], "python3");
         assert!(log[1]["timeout_ms"].as_u64().unwrap() <= 30_000);
         assert!(log[1]["max_output_bytes"].as_u64().unwrap() <= 16_384);

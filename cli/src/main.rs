@@ -162,6 +162,12 @@ enum SandboxCommands {
     New {
         #[arg(long)]
         image: Option<String>,
+        /// Select a MagicMtn inference model (defaults to your saved Pi preference)
+        #[arg(long, conflicts_with_all = ["image", "pi_connection"])]
+        model: Option<uuid::Uuid>,
+        /// Use an explicitly connected Pi inference profile
+        #[arg(long, conflicts_with = "image")]
+        pi_connection: Option<uuid::Uuid>,
         #[arg(long, requires = "image")]
         provider: Option<String>,
         #[arg(long, requires = "image")]
@@ -630,12 +636,15 @@ async fn run(cli: Cli) -> Result<()> {
     match command {
         SandboxCommands::New {
             image,
+            model,
+            pi_connection,
             provider,
             connection,
             notes,
         } => {
             let explicit_image = image.is_some();
             let key = uuid::Uuid::new_v4();
+            eprintln!("Creating sandbox {key}.");
             let (route, body) = match image {
                 Some(image) => (
                     "v1/sandboxes",
@@ -649,7 +658,7 @@ async fn run(cli: Cli) -> Result<()> {
                 ),
                 None => (
                     "v1/sandboxes/managed",
-                    configuration::creation_body(&api, json!({"idempotency_key": key}))?,
+                    pi::managed_creation_body(&api, model, pi_connection, key).await?,
                 ),
             };
             let result = api.request(Method::POST, route, Some(body)).await?;
