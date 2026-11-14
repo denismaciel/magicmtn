@@ -243,17 +243,14 @@ for (const [name, data] of [
   ["typing", "a"], ["arrow key", "\x1b[A"], ["shortcut", "\x03"],
   ["paste", "\x1b[200~first prompt\x1b[201~"],
 ]) {
-  test(`first ${name} dismisses the mountain and tip and reaches Pi unchanged`, (t) => {
+  test(`first ${name} dismisses the entire welcome and reaches Pi unchanged`, (t) => {
     const f = fixture(t);
     const status = f.statuses.get("magicmtn");
     const before = f.widgets.get("magicmtn-welcome").render(80);
     f.send(data);
     const after = f.widgets.get("magicmtn-welcome").render(80);
     assert.ok(before.length > after.length);
-    assert.equal(after.length, 1);
-    const remaining = after.join("\n");
-    assert.doesNotMatch(remaining, /[\u2801-\u28ff]|Tip:|GitHub|MCPs|control\.magicmtn\.ai/u);
-    assert.ok(after.some((line) => line.trim() === "MagicMtn"));
+    assert.deepEqual(after, []);
     assert.doesNotMatch(f.editor().render(80).join("\n"), /Atop the MagicMtn sandbox/);
     assert.equal(f.subscriptions(), 0);
     assert.deepEqual(f.input, [data]);
@@ -261,19 +258,17 @@ for (const [name, data] of [
     f.send("next");
     assert.deepEqual(f.input, [data, "next"]);
     f.emit("model_select");
-    assert.doesNotMatch(f.widgets.get("magicmtn-welcome").render(80).join("\n"), /⣿|Tip:|control\.magicmtn\.ai/);
+    assert.deepEqual(f.widgets.get("magicmtn-welcome").render(80), []);
     f.emit("session_shutdown");
     assert.equal(f.widgets.size, 0);
     assert.equal(f.subscriptions(), 0);
   });
 }
 
-test("starting the agent dismisses the tip without requiring terminal input", (t) => {
+test("starting the agent dismisses the entire welcome without requiring terminal input", (t) => {
   const f = fixture(t);
   f.emit("agent_start");
-  const rendered = f.widgets.get("magicmtn-welcome").render(80).join("\n");
-  assert.doesNotMatch(rendered, /[\u2801-\u28ff]|Tip:|GitHub|MCPs|control\.magicmtn\.ai/u);
-  assert.match(rendered, /MagicMtn/);
+  assert.deepEqual(f.widgets.get("magicmtn-welcome").render(80), []);
   assert.equal(f.subscriptions(), 0);
   assert.deepEqual(f.input, []);
 });

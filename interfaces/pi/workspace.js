@@ -171,13 +171,12 @@ export default function workspaceStatus(pi) {
       let measuring = false;
       const widget = {
         render(width) {
-          if (measuring) return [];
+          if (measuring || !showWelcome) return [];
           const center = (line) => {
             const text = line.trim();
             return " ".repeat(Math.max(0, Math.floor((width - visibleWidth(text)) / 2))) + text;
           };
           const welcome = copy.render(width).map(center);
-          if (!showWelcome) return welcome;
 
           // Measure Pi's native content with this widget omitted to avoid recursion.
           let occupied;
