@@ -59,6 +59,9 @@ class EnvironmentTests(unittest.TestCase):
                          {"defaultProvider": "magicmtn", "defaultModel": "test-model"})
         self.assertTrue((config_dir / "extensions/magicmtn-mcp/index.js").is_file())
         self.assertTrue((config_dir / "extensions/magicmtn-workspace/index.js").is_file())
+        context = config_dir / "extensions/magicmtn-context"
+        self.assertEqual((context / "context.md").read_text(), (RUNTIME / "context.md").read_text())
+        self.assertTrue((context / "index.js").is_file())
         reporter = config_dir / "extensions/magicmtn-errors"
         self.assertTrue((reporter / "index.js").is_file())
         self.assertTrue((reporter / "error-worker.js").is_file())
@@ -149,6 +152,10 @@ class EnvironmentTests(unittest.TestCase):
             self.assertEqual(path, "/v1/harness/agent/chat/completions")
             self.assertEqual(authorization, "Bearer scoped-test-token")
             self.assertEqual(body["model"], "test-model")
+            system = "\n".join(message["content"] for message in body["messages"]
+                               if message["role"] == "system")
+            self.assertIn((RUNTIME / "context.md").read_text(), system)
+            self.assertIn("You are a coding assistant", system)
             tools = {tool["function"]["name"] for tool in body["tools"]}
             self.assertTrue({"mcp_catalog", "mcp_call"} <= tools)
         self.assertEqual(mcp_calls, [("/v1/mcp/runtime", "Bearer scoped-test-token")] * 2)

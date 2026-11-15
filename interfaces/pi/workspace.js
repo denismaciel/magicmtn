@@ -167,17 +167,10 @@ export default function workspaceStatus(pi) {
       requestRender = () => tui.requestRender();
       const tip = `   ${theme.fg("accent", "Tip:")} Integrate with your GitHub repos and add MCPs to power your agents at https://control.magicmtn.ai/`;
       const tipText = new Text(tip, 0, 0);
-      const copy = new Text("MagicMtn", 0, 0);
       let measuring = false;
       const widget = {
         render(width) {
           if (measuring || !showWelcome) return [];
-          const center = (line) => {
-            const text = line.trim();
-            return " ".repeat(Math.max(0, Math.floor((width - visibleWidth(text)) / 2))) + text;
-          };
-          const welcome = copy.render(width).map(center);
-
           // Measure Pi's native content with this widget omitted to avoid recursion.
           let occupied;
           measuring = true;
@@ -187,22 +180,21 @@ export default function workspaceStatus(pi) {
           const tips = tipText.render(width);
           const heading = [...tips, ""];
           const selected = LOGOS.find((logo) => logo.width <= width
-            && heading.length + logo.lines.length + 1 + welcome.length <= height);
+            && heading.length + logo.lines.length <= height);
           if (!selected) {
-            const content = heading.length + welcome.length <= height ? [...heading, ...welcome] : tips;
-            return content.slice(0, height);
+            return tips.slice(0, height);
           }
           const logo = selected.lines;
           const logoPadding = " ".repeat(Math.max(0, Math.floor((width - selected.width) / 2)));
           // Braille cells provide fine dots; faint theme color softens the mark on any background.
           const artwork = logo.map((line) => logoPadding
             + `\x1b[2m${theme.fg("dim", truncateToWidth(line, width - logoPadding.length, ""))}\x1b[22m`);
-          const content = [...artwork, "", ...welcome];
+          const content = artwork;
           const space = Math.max(0, height - heading.length - content.length);
           const above = Math.min(space, Math.floor((height - heading.length - logo.length) / 2));
           return [...heading, ...Array(above).fill(""), ...content, ...Array(space - above).fill("")];
         },
-        invalidate() { tipText.invalidate(); copy.invalidate(); },
+        invalidate() { tipText.invalidate(); },
       };
       return widget;
     });

@@ -7,6 +7,7 @@ python3 -m venv /opt/magicmtn/venv
 command -v pi >/dev/null
 node --check /opt/magicmtn/runtime/errors.js
 node --check /opt/magicmtn/runtime/error-worker.js
+node --check /opt/magicmtn/runtime/context.js
 chmod 0555 /opt/magicmtn/runtime/agent.py
 rm -f /usr/local/bin/magicmtn-sandbox-agent
 cat > /usr/local/bin/magicmtn-sandbox-agent <<'WRAPPER'

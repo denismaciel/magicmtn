@@ -92,7 +92,7 @@ function fixture(t, { mode = "tui", sandbox = true, supervised = true, rows = 40
     send: (data) => tui.handleTerminalInput(data) };
 }
 
-test("sandbox welcome renders the faint dotted logo and copy above the editor", (t) => {
+test("sandbox welcome renders only the faint dotted logo above the editor", (t) => {
   const f = fixture(t);
   const widget = f.widgets.get("magicmtn-welcome");
   const renderedLines = widget.render(80);
@@ -108,7 +108,7 @@ test("sandbox welcome renders the faint dotted logo and copy above the editor", 
     const base = rendered.find(hasDots);
     const copy = rendered.slice(rendered.findLastIndex(hasDots) + 1)
       .filter((line) => line.trim());
-    assert.equal(copy.map((line) => line.trim()).join(" "), "MagicMtn");
+    assert.deepEqual(copy, []);
     assert.doesNotMatch(rendered.join("\n"), /Atop the MagicMtn sandbox/);
     for (const entry of [base, ...copy]) {
       const line = entry.trimEnd();
@@ -140,7 +140,7 @@ for (const nested of [false, true]) {
   test(`small ${nested ? "fullscreen" : "regular"} terminals keep the tip instead of the mountain`, (t) => {
     const f = fixture(t, { rows: 23, nested });
     const widget = f.widgets.get("magicmtn-welcome");
-    for (const rows of [23, 22, 19, 17]) {
+    for (const rows of [21, 20, 19, 17]) {
       f.tui.terminal.rows = rows;
       const lines = widget.render(80);
       assert.equal(lines.filter(hasDots).length, 0);

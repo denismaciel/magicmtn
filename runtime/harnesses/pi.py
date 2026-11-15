@@ -37,6 +37,11 @@ class PiHarness:
             "origin": config["origin"], "token": config["token"],
             "ca_certificate": config.get("ca_certificate"),
         })
+        extension = self.directory / "extensions" / "magicmtn-context"
+        extension.mkdir(parents=True, exist_ok=True)
+        for source, destination in (("context.js", "index.js"), ("context.md", "context.md")):
+            (extension / destination).write_text((runtime / source).read_text())
+        (extension / "package.json").write_text('{"type":"module"}')
         if config.get("integrations_origin"):
             extension = self.directory / "extensions" / "magicmtn-mcp"
             extension.mkdir(parents=True, exist_ok=True)

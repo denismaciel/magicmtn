@@ -14,6 +14,7 @@ mod completions;
 mod configuration;
 mod execution;
 mod mcp;
+mod mode;
 mod pi;
 mod provider_registry;
 mod sandbox_scp;
@@ -148,6 +149,8 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum ServerCommands {
+    /// Stop the local server after active requests finish
+    Stop,
     /// Initialize local state and serve sandbox operations until interrupted
     Start {
         #[arg(long, default_value = "127.0.0.1:8080")]
@@ -611,17 +614,60 @@ async fn run(cli: Cli) -> Result<()> {
         Cli::command().print_help()?;
         return Ok(());
     };
-    if let Commands::Server {
-        command: ServerCommands::Start { bind, ttl_seconds },
-    } = command
-    {
-        return magicmtn_local::run(magicmtn_local::Options {
-            bind,
-            ttl_seconds,
-            directory: magicmtn_local::directory()?,
-            provider_directory: configuration::directory()?.join("providers"),
-        })
-        .await;
+    if let Commands::Server { command } = command {
+        return match command {
+            ServerCommands::Start { bind, ttl_seconds } => {
+                let transition = mode::transition()?;
+                authentication::Credentials::new()?
+                    .ensure_signed_out()
+                    .await?;
+                let directory = std::path::absolute(magicmtn_local::directory()?)?;
+                let _running = mode::server(&directory)?;
+                drop(transition);
+                magicmtn_local::run(magicmtn_local::Options {
+                    bind,
+                    ttl_seconds,
+                    directory,
+                    provider_directory: configuration::directory()?.join("providers"),
+                })
+                .await
+            }
+            ServerCommands::Stop => {
+                let _transition = mode::transition()?;
+                let directory = match mode::running_directory()? {
+                    Some(directory) => directory,
+                    None => magicmtn_local::directory()?,
+                };
+                anyhow::ensure!(
+                    magicmtn_local::is_running(&directory)?,
+                    "local MagicMtn server is stopped"
+                );
+                let info = magicmtn_local::connection(&directory)?;
+                let mut api = Api::new(&info.url)?;
+                anyhow::ensure!(
+                    api.base.scheme() == "http"
+                        && matches!(
+                            api.base.host_str(),
+                            Some("127.0.0.1" | "localhost" | "[::1]")
+                        ),
+                    "local connection must use loopback HTTP"
+                );
+                api.token = Some(info.token);
+                api.request(reqwest::Method::POST, "shutdown", None).await?;
+                tokio::time::timeout(std::time::Duration::from_secs(30), async {
+                    while magicmtn_local::is_running(&directory)?
+                        || mode::running_directory()?.as_ref() == Some(&directory)
+                    {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                    anyhow::Ok(())
+                })
+                .await
+                .context("waiting for local MagicMtn server to stop")??;
+                println!("MagicMtn local server stopped.");
+                Ok(())
+            }
+        };
     }
     if let Commands::Uninstall = command {
         return uninstall::run(&server_url).await;

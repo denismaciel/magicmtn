@@ -18,6 +18,8 @@ magic provider install apple-container
 
 ## Start the server
 
+Sign out of MagicMtn Cloud with `magic logout` before starting the local server. Cloud login and the local server use mutually exclusive modes.
+
 ```sh
 magic server start
 ```
@@ -41,7 +43,7 @@ The execution command prints the exit code, output, and timeout information. App
 
 ## Restart and clean up
 
-Press Ctrl+C in the server terminal, then run `magic server start` again. Sandbox records persist, and the lifecycle worker resumes inspection and pending cleanup. Stopping the server leaves running sandboxes available for the next startup.
+Run `magic server stop` or press Ctrl+C in the server terminal, then run `magic server start` again. Sandbox records persist, and the lifecycle worker resumes inspection and pending cleanup. Stopping the server leaves running sandboxes available for the next startup.
 
 Delete a sandbox and its files when finished:
 
@@ -50,6 +52,8 @@ magic --local sandbox terminate "$sandbox_id" --yes
 ```
 
 Sandboxes have a 24-hour default lifetime. Set `magic server start --ttl-seconds SECONDS` to choose a lifetime between 1 second and 24 hours for new sandboxes. The lifecycle worker cleans up expired sandboxes while the server is running and resumes that work after restart.
+
+Run `magic server stop` before signing in to MagicMtn Cloud with `magic login`.
 
 Stop the server before installing or uninstalling providers. Keep provider releases referenced by active sandboxes until those sandboxes are deleted.
 

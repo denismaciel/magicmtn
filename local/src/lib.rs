@@ -4,7 +4,7 @@ use axum::extract::{Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::Response;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use magicmtn_engine::sandbox_storage::{sqlite::Database, Store};
 use magicmtn_engine::sandboxes::{LocalPolicy, ServiceState};
@@ -68,6 +68,26 @@ pub fn connection(directory: &Path) -> Result<ConnectionInfo> {
         &fs::read(path).context("start the local server with `magic server start`")?,
     )
     .context("reading local server connection")
+}
+
+/// A connection file survives shutdown; only a held process lock means running.
+pub fn is_running(directory: &Path) -> Result<bool> {
+    let lock = match fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(directory.join("server.lock"))
+    {
+        Ok(lock) => lock,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error).context("checking local server lock"),
+    };
+    match lock.try_lock() {
+        Ok(()) => Ok(false),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(true),
+        Err(std::fs::TryLockError::Error(error)) => {
+            Err(error).context("checking local server lock")
+        }
+    }
 }
 
 fn prepare_directory(directory: &Path) -> Result<File> {
@@ -226,11 +246,26 @@ pub async fn run(options: Options) -> Result<()> {
         &options.directory,
         format!("http://{}", listener.local_addr()?),
     )?;
+    let (stop, mut stopped) = tokio::sync::watch::channel(false);
     let app = router(
         store.clone(),
         registry.clone(),
-        info.token,
+        info.token.clone(),
         options.ttl_seconds,
+    )
+    .route(
+        "/shutdown",
+        post(move || {
+            let stop = stop.clone();
+            async move {
+                let _ = stop.send(true);
+                Json(json!({"status":"stopping"}))
+            }
+        })
+        .layer(middleware::from_fn_with_state(
+            Arc::new(info.token.clone()),
+            authenticate,
+        )),
     );
     let worker = tokio::spawn(magicmtn_engine::sandbox_lifecycle::run_store(
         store.clone(),
@@ -238,7 +273,9 @@ pub async fn run(options: Options) -> Result<()> {
     ));
     eprintln!("MagicMtn local server listening on {}", info.url);
     let result = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown())
+        .with_graceful_shutdown(async move {
+            tokio::select! { _ = shutdown() => {}, _ = stopped.changed() => {} }
+        })
         .await;
     worker.abort();
     let _ = worker.await;

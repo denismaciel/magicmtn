@@ -43,6 +43,36 @@ impl Credentials {
             .map(|value| value["token"].as_str().unwrap().to_owned()))
     }
 
+    /// Check every saved remote session, including explicit server overrides.
+    pub(crate) async fn ensure_signed_out(&self) -> Result<()> {
+        let entries = match fs::read_dir(&self.directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error).context("reading saved CLI sessions"),
+        };
+        for entry in entries {
+            let path = entry?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let saved: Value =
+                serde_json::from_slice(&fs::read(&path)?).context("invalid saved CLI session")?;
+            let mut api = Api::new(required_string(&saved, "server")?)?;
+            api.token = self.load(&api.base)?;
+            let logout = if api.base.as_str() == "https://api.magicmtn.ai/" {
+                "magic logout".to_owned()
+            } else {
+                format!("magic --server-url {} logout", api.base)
+            };
+            ensure!(
+                account(&api).await?["signed_in"] != true,
+                "signed in to MagicMtn Cloud at {}; run `{logout}` before `magic server start`",
+                api.base
+            );
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     fn plan_access(&self, server: &Url) -> Result<Value> {
         self.read(server)?
@@ -208,6 +238,7 @@ pub(crate) fn open_browser(url: &Url) -> Result<()> {
 }
 
 pub(crate) async fn login(api: &Api, client: &str) -> Result<()> {
+    let _mode = crate::mode::login()?;
     let (origin, handoff, url) = start(api, client).await?;
     println!("Sign in and approve CLI access in your browser:\n{url}");
     if open_browser(&url).is_err() {
@@ -362,6 +393,43 @@ mod tests {
             json!({"signed_in":true,"user":{"display_name":"Rodrigo","email":"rodrigo@example.test"}})
         );
         server.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn local_start_checks_all_saved_sessions_and_allows_expired_credentials() -> Result<()> {
+        let app = Router::new().route(
+            "/auth/me",
+            get(|headers: HeaderMap| async move {
+                if headers["authorization"] == "Bearer valid" {
+                    (
+                        axum::http::StatusCode::OK,
+                        Json(json!({"display_name":"Person","email":"person@example.test"})),
+                    )
+                } else {
+                    (axum::http::StatusCode::UNAUTHORIZED, Json(json!({})))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let url = Url::parse(&format!("http://{}/", listener.local_addr()?))?;
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let directory = tempfile::tempdir()?;
+        let credentials = Credentials {
+            directory: directory.path().join("cli"),
+        };
+        credentials.ensure_signed_out().await?;
+        credentials.save(&url, "valid", None)?;
+        let error = credentials
+            .ensure_signed_out()
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("logout"));
+        credentials.save(&url, "expired", None)?;
+        credentials.ensure_signed_out().await?;
+        server.abort();
+        assert!(credentials.ensure_signed_out().await.is_err());
         Ok(())
     }
 
