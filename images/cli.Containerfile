@@ -14,6 +14,7 @@ COPY cli ./cli
 COPY core ./core
 COPY local ./local
 COPY assets ./assets
+COPY runtime ./runtime
 COPY registry ./registry
 COPY scripts/install-public.sh ./scripts/install-public.sh
 COPY tests ./tests
