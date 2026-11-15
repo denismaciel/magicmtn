@@ -38,6 +38,10 @@ def main():
     installed_pi = subprocess.check_output(["podman", "run", *platform_options, "--rm", "--network", "none",
                                             args.tag, "pi", "--version"], text=True).strip()
     assert installed_pi == expected_pi, f"Pi version mismatch: expected {expected_pi}, got {installed_pi}"
+    expected_codex = json.loads((context / "package.json").read_text())["dependencies"]["@openai/codex"]
+    installed_codex = subprocess.check_output(["podman", "run", *platform_options, "--rm", "--network", "none",
+                                               args.tag, "codex", "--version"], text=True).strip()
+    assert installed_codex == f"codex-cli {expected_codex}", f"Codex version mismatch: {installed_codex}"
     # No provider credentials or network access are needed for these checks.
     smoke = r'''
 test "$(id -u)" = 10001
@@ -49,6 +53,12 @@ node --version
 node --check /opt/magicmtn/runtime/errors.js
 node --check /opt/magicmtn/runtime/error-worker.js
 pi --version
+codex --version
+codex login --help > /tmp/codex-login-help.txt
+grep -q -- '--device-auth' /tmp/codex-login-help.txt
+codex mcp --help > /tmp/codex-mcp-help.txt
+codex mcp list --json
+test "$(stat -c %a "$HOME/.codex")" = 700
 gh --version
 fd --version
 gh help > /tmp/gh-help.txt

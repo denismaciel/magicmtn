@@ -40,6 +40,8 @@ In Pi, `/magic new` starts a workspace using your saved defaults. Use
 
 Run a single-user server and Apple Container sandboxes using your own machine and bundled SQLite. Follow [Run MagicMtn locally](docs/local-server.md) to install the provider, start the server, and execute commands in a sandbox.
 
+Use your ChatGPT subscription with [Codex in a local sandbox](docs/local-codex.md), with shell access and MCP tools.
+
 ## Development
 
 Run the engine and SDK tests with [Bazelisk](https://github.com/bazelbuild/bazelisk#installation):

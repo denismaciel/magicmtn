@@ -41,6 +41,8 @@ magic --local sandbox list
 
 The execution command prints the exit code, output, and timeout information. Apple Container sandboxes use an isolated network by default. Images are pulled by the host runtime when needed.
 
+Open an interactive shell with `magic --local sandbox ssh "$sandbox_id"`. Type `exit` to return to your Mac. To use your ChatGPT subscription and MCP tools inside a sandbox, follow [Use Codex in a local sandbox](local-codex.md).
+
 ## Restart and clean up
 
 Run `magic server stop` or press Ctrl+C in the server terminal, then run `magic server start` again. Sandbox records persist, and the lifecycle worker resumes inspection and pending cleanup. Stopping the server leaves running sandboxes available for the next startup.
