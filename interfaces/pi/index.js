@@ -224,14 +224,14 @@ export default function magicmtn(pi) {
               if (!workspace) return;
               while (true) {
                 const selected = await select(ctx, `MagicMtn sandbox ${workspace.id.slice(0, 8)}`,
-                  [{ id: "enter", label: "Enter/ssh" }, { id: "terminate", label: "Terminate" }, { id: "status", label: "Session status" }, { id: "stop", label: "Stop agent" }, { id: "restart", label: "Restart agent" }], (item) => item.label, false, states);
+                  [{ id: "enter", label: "Enter/ssh" }, { id: "terminate", label: "Terminate" }, { id: "stop", label: "Stop agent" }, { id: "restart", label: "Restart agent" }], (item) => item.label, false, states);
                 if (selected === BACK) continue sandboxes;
                 if (!selected) return;
                 if (selected.id === "enter") break sandboxes;
-                if (["status", "stop", "restart"].includes(selected.id)) {
-                  if (selected.id !== "status" && !(await ctx.ui.confirm("MagicMtn agent", `${selected.id === "stop" ? "Stop" : "Restart"} the agent in this sandbox? This may interrupt active work.`))) continue;
-                  const result = await magic(["pi", selected.id, workspace.id]);
-                  ctx.ui.notify(selected.id === "status" ? JSON.stringify(result) : "Command recorded; the sandbox supervisor will acknowledge it on reconnect.", "info");
+                if (["stop", "restart"].includes(selected.id)) {
+                  if (!(await ctx.ui.confirm("MagicMtn agent", `${selected.id === "stop" ? "Stop" : "Restart"} the agent in this sandbox? This may interrupt active work.`))) continue;
+                  await magic(["pi", selected.id, workspace.id]);
+                  ctx.ui.notify("Command recorded; the sandbox supervisor will acknowledge it on reconnect.", "info");
                   continue;
                 }
                 const confirmation = await select(ctx, `Delete sandbox ${workspace.id} and its workspace files?`,

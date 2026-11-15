@@ -161,7 +161,7 @@ test("Left from termination confirmation returns to sandbox actions, then to the
   const f = await fixture(t, { workspaces: [workspace] });
   f.choices.push(0, 1, "<left>", "<left>", undefined);
   await f.command.handler("view", f.ctx);
-  assert.deepEqual(f.menus[3].items, ["Enter/ssh", "Terminate", "Session status", "Stop agent", "Restart agent"]);
+  assert.deepEqual(f.menus[3].items, ["Enter/ssh", "Terminate", "Stop agent", "Restart agent"]);
   assert.equal(f.menus[4].title, "Sandboxes");
   assert.deepEqual(f.calls(), [["pi", "list"], ["pi", "list"]]);
 });
@@ -281,7 +281,7 @@ test("open lists every live instance across backends without grouping", async (t
   assert.equal(f.menus[0].items.length, 3);
   assert.doesNotMatch(f.menus[0].items.join(" "), /exe.dev|Apple Container/);
   assert.match(f.menus[0].items[1], /MagicMtn Canonical/);
-  assert.deepEqual(f.menus[1].items, ["Enter/ssh", "Terminate", "Session status", "Stop agent", "Restart agent"]);
+  assert.deepEqual(f.menus[1].items, ["Enter/ssh", "Terminate", "Stop agent", "Restart agent"]);
   assert.deepEqual(f.calls(), [["pi", "list"], ["pi", "attach", third.id]]);
 });
 test("open with no live workspaces does not start provisioning", async (t) => {
@@ -365,7 +365,7 @@ test("cancelling termination leaves the sandbox available without entering it", 
   f.choices.push(0, 1, 0, undefined);
   await f.command.handler("view", f.ctx);
   assert.deepEqual(f.calls(), [["pi", "list"]]);
-  assert.deepEqual(f.menus.at(-1).items, ["Enter/ssh", "Terminate", "Session status", "Stop agent", "Restart agent"]);
+  assert.deepEqual(f.menus.at(-1).items, ["Enter/ssh", "Terminate", "Stop agent", "Restart agent"]);
 });
 
 test("authentication commands do not invoke the CLI or take over the terminal", async (t) => {
@@ -379,7 +379,7 @@ test("authentication commands do not invoke the CLI or take over the terminal", 
   assert.deepEqual(f.menus, []);
 });
 
-for (const [label,command] of [["Session status","status"],["Stop agent","stop"],["Restart agent","restart"]]) {
+for (const [label,command] of [["Stop agent","stop"],["Restart agent","restart"]]) {
  test(`workspace ${command} uses explicit session lifecycle command`, async (t) => {
   const f = await fixture(t, {workspaces:[workspace]});
   f.choices.push(0,label,undefined);
