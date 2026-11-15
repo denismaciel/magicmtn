@@ -1,5 +1,13 @@
 import { lazyStream, openAICompletionsApi } from "@earendil-works/pi-ai/compat";
 
+export function uniqueModels(entries, defaultId) {
+  const models = new Map();
+  for (const entry of entries) {
+    if (!models.has(entry.display_name) || entry.id === defaultId) models.set(entry.display_name, entry);
+  }
+  return [...models.values()];
+}
+
 // Pi owns model selection, rendering, requests, and the agent/tool loop. This
 // provider only supplies account models and a short-lived grant for each request.
 export function createInferenceProvider(request, { now = Date.now, api = openAICompletionsApi() } = {}) {
@@ -8,6 +16,7 @@ export function createInferenceProvider(request, { now = Date.now, api = openAIC
   let models = new Map();
   let catalog = new Map();
   let aliases = new Map();
+  let visibleIds = new Set();
   const grants = new Map();
 
   async function authorize(id, signal) {
@@ -26,7 +35,7 @@ export function createInferenceProvider(request, { now = Date.now, api = openAIC
     }
     const lifetime = Number(config.expiresIn);
     if (!Number.isFinite(lifetime) || lifetime <= 0) throw new Error("Invalid MagicMtn grant lifetime");
-    models.set(id, { ...definition, id: models.get(id).id, provider: "magicmtn", api: config.api, baseUrl: config.baseUrl });
+    models.set(id, { ...definition, id: models.get(id).id, name: catalog.get(id).display_name, provider: "magicmtn", api: config.api, baseUrl: config.baseUrl });
     grants.set(id, { config, expiresAt: now() + Math.max(0, lifetime - 60) * 1000 });
     return config;
   }
@@ -58,14 +67,15 @@ export function createInferenceProvider(request, { now = Date.now, api = openAIC
         async check() { return active ? { type: "api_key", source: "magic login" } : undefined; },
         async resolve() { return active ? { auth: {}, source: "magic login" } : undefined; },
       } },
-      getModels() { return [...models.values()]; },
+      getModels() { return [...visibleIds].map((id) => models.get(id)); },
       stream: forward("stream"),
       streamSimple: forward("streamSimple"),
     },
-    load(entries) {
+    load(entries, defaultId) {
       revision += 1;
       grants.clear();
       catalog = new Map(entries.map((entry) => [entry.id, entry]));
+      visibleIds = new Set(uniqueModels(entries, defaultId).map((entry) => entry.id));
       aliases = new Map();
       models = new Map(entries.map((entry) => {
         const stem = (entry.source_model_id?.split("/").at(-1) || entry.display_name)
@@ -82,7 +92,7 @@ export function createInferenceProvider(request, { now = Date.now, api = openAIC
       }));
       active = entries.length > 0;
     },
-    clear() { active = false; revision += 1; models.clear(); catalog.clear(); aliases.clear(); grants.clear(); },
+    clear() { active = false; revision += 1; models.clear(); catalog.clear(); aliases.clear(); visibleIds.clear(); grants.clear(); },
     model(id) { return catalog.get(aliases.get(id) || id); },
     idFor(id) { return models.get(id)?.id; },
     authorize,

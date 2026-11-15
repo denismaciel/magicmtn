@@ -63,6 +63,29 @@ test("each selected model uses its own scoped grant and Pi's existing adapter", 
   assert.deepEqual(f.requests.map(({ args }) => args), [["pi", "inference", "--model", "alpha"], ["pi", "inference", "--model", "beta"]]);
 });
 
+test("duplicate display names appear once and retain backend routing and saved model aliases", async () => {
+  const f = fixture();
+  const duplicate = { id: "other-alpha", display_name: "Alpha", provider: "baseten" };
+  f.inference.load([...entries, duplicate]);
+  const originalId = f.inference.idFor("alpha");
+  assert.deepEqual(f.inference.provider.getModels().map((model) => model.name), ["Alpha", "Beta"]);
+  await f.inference.provider.streamSimple(f.inference.provider.getModels()[0], {}).result();
+  assert.equal(f.requests.at(-1).args.at(-1), "alpha");
+
+  f.inference.load([...entries, duplicate], duplicate.id);
+  const visible = f.inference.provider.getModels();
+  assert.equal(visible.filter((model) => model.name === "Alpha").length, 1);
+  const selected = visible.find((model) => model.name === "Alpha");
+  assert.equal(selected.id, f.inference.idFor(duplicate.id));
+  await f.inference.provider.streamSimple(selected, {}).result();
+  assert.equal(f.requests.at(-1).args.at(-1), duplicate.id);
+  assert.equal((await f.sent.at(-1).options.onPayload({})).model, duplicate.id);
+
+  await f.inference.provider.streamSimple({ ...selected, id: originalId }, {}).result();
+  assert.equal(f.requests.at(-1).args.at(-1), "alpha");
+  assert.equal(f.inference.provider.getModels().length, 2);
+});
+
 test("grants cache by model and renew before expiry", async () => {
   const f = fixture();
   const model = f.inference.provider.getModels()[0];

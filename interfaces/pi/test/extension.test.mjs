@@ -135,6 +135,23 @@ test("Default uses account catalogs, chooses only a model, and saves without pro
   await f.command.handler("", f.ctx);
   assert.equal(f.menus.at(-1).items[0], "Default (GLM 5.3 Flash)");
 });
+test("model pickers deduplicate backend display names and preserve the saved default", async (t) => {
+  const duplicate = { ...model, id: "baseten-model", provider: "baseten" };
+  const f = await fixture(t, { models: [model, duplicate], defaults: { model_id: duplicate.id } });
+  await f.handlers.get("session_start")({}, f.ctx);
+  assert.equal(f.provider().getModels().length, 1);
+  assert.match(f.provider().getModels()[0].id, /^baseten\//);
+  f.choices.push(0);
+  await f.command.handler("default", f.ctx);
+  assert.deepEqual(f.menus.at(-1).items, ["Model [baseten]"]);
+  assert.match(f.menus.at(-1).rendered, /· default/);
+  assert.deepEqual(f.calls().at(-1), ["pi", "defaults", "--model", duplicate.id]);
+  f.choices.push(0);
+  await f.command.handler("inference", f.ctx);
+  assert.equal(f.menus.at(-1).items.length, 1);
+  assert.deepEqual(f.calls().at(-1), ["pi", "inference", "--model", duplicate.id]);
+});
+
 test("cancelling the model picker preserves defaults", async (t) => {
   const f = await fixture(t);
   f.choices.push(undefined);

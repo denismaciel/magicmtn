@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { providerLabel } from "./workspace.js";
 import { BACK, pickDefault } from "./picker.js";
-import { createInferenceProvider } from "./inference.js";
+import { createInferenceProvider, uniqueModels } from "./inference.js";
 
 // Replaced with the installing CLI's absolute path by magic pi install.
 const magicExecutable = null;
@@ -41,7 +41,7 @@ export function magic(args, signal, input) {
 }
 
 export function workspaceModels(ctx, catalog) {
-  const models = [...catalog.models];
+  const models = uniqueModels(catalog.models, catalog.defaults?.model_id);
   if (ctx.model && ctx.model.provider !== "magicmtn") {
     models.unshift({ id: "__pi_current__", display_name: `Pi: ${ctx.model.name || ctx.model.id}`, provider: ctx.model.provider });
   }
@@ -83,7 +83,7 @@ async function selectModel(ctx, catalog, states) {
   if (!catalog.models.length && catalog.unavailable_models?.length) {
     throw new Error(catalog.unavailable_models.map((m) => `${m.display_name}: ${m.reason}`).join("\n"));
   }
-  return select(ctx, "Models", catalog.models, (m) => `${m.display_name} (${m.provider})`, true, states);
+  return select(ctx, "Models", uniqueModels(catalog.models, catalog.defaults.model_id), (m) => `${m.display_name} (${m.provider})`, true, states);
 }
 
 async function terminal(ctx, args) {
@@ -114,7 +114,7 @@ async function terminal(ctx, args) {
 export default function magicmtn(pi) {
   const inference = createInferenceProvider(magic);
   const refreshModels = async (ctx, catalog) => {
-    inference.load(catalog.models);
+    inference.load(catalog.models, catalog.defaults.model_id);
     pi.registerProvider(inference.provider);
     // Pi's available-model/auth snapshots refresh asynchronously. Await them
     // before setModel(), and before offering these models in its native picker.
