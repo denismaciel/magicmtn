@@ -19,8 +19,15 @@ pub(crate) fn init() -> ClientInitGuard {
 }
 
 pub(crate) async fn report(client: &str, operation: &str, error: &Error, server_url: &str) {
+    if !crate::configuration::error_reporting().unwrap_or(false) {
+        return;
+    }
     let message = error.to_string().to_ascii_lowercase();
-    if operation == "report"
+    // Remote exits are queued by the authenticated server relay. Avoid an
+    // identity lookup and duplicate delivery while returning to local Pi.
+    if message.starts_with("terminal disconnected: status ")
+        || message.starts_with("remote terminal exited with status ")
+        || operation == "report"
         || message.contains("cancelled")
         || message.contains("not signed in")
         || message.contains("select an available")

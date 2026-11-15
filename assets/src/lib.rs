@@ -9,3 +9,6 @@ pub mod fixtures {
     pub const MULTIMODEL_ARTIFACTS: &str =
         include_str!("../../tests/fixtures/harness-models-multimodel-artifacts.example.json");
 }
+
+pub const PI_ERROR_EXTENSION: &str = include_str!("../../runtime/errors.js");
+pub const PI_ERROR_WORKER: &str = include_str!("../../runtime/error-worker.js");

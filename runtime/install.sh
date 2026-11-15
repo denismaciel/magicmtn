@@ -5,6 +5,8 @@ python3 -m venv /opt/magicmtn/venv
 /opt/magicmtn/venv/bin/pip install --no-cache-dir -r /opt/magicmtn/runtime/requirements.txt
 /opt/magicmtn/venv/bin/python3 -c 'import sys; sys.path.insert(0, "/opt/magicmtn/runtime"); import agent; import websockets.sync.client; from harnesses.pi import PiHarness'
 command -v pi >/dev/null
+node --check /opt/magicmtn/runtime/errors.js
+node --check /opt/magicmtn/runtime/error-worker.js
 chmod 0555 /opt/magicmtn/runtime/agent.py
 rm -f /usr/local/bin/magicmtn-sandbox-agent
 cat > /usr/local/bin/magicmtn-sandbox-agent <<'WRAPPER'

@@ -418,7 +418,7 @@ async fn terminal(api: &Api, path: &str, label: &str) -> Result<()> {
     let (cols, rows) = crossterm::terminal::size()?;
     eprintln!("Connecting {label} (Ctrl+] disconnects; the sandbox remains running)…");
     let attached = api
-        .request(Method::POST, path, Some(json!({"cols":cols,"rows":rows})))
+        .request(Method::POST, path, Some(json!({"cols":cols,"rows":rows,"error_reporting":crate::configuration::error_reporting()?})))
         .await?;
     let gateway_client = crate::http_client()?;
     let gateway = attached["poll_url"]

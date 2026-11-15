@@ -15,7 +15,7 @@ def run(*args, **kwargs):
 
 def runtime_sources(root):
     runtime = root / "runtime"
-    files = [*sorted(runtime.glob("*.py")), runtime / "requirements.txt", runtime / "mcp.js", runtime / "install.sh", *sorted((runtime / "harnesses").glob("*.py"))]
+    files = [*sorted(runtime.glob("*.py")), runtime / "requirements.txt", *sorted(runtime.glob("*.js")), runtime / "install.sh", *sorted((runtime / "harnesses").glob("*.py"))]
     return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
 
 
@@ -46,6 +46,8 @@ test -w "$HOME"
 python -c 'import ssl, sqlite3, venv; print("Python", __import__("sys").version.split()[0])'
 python -m pip --version
 node --version
+node --check /opt/magicmtn/runtime/errors.js
+node --check /opt/magicmtn/runtime/error-worker.js
 pi --version
 gh --version
 fd --version
@@ -74,7 +76,7 @@ python -m venv /workspace/project-venv
                          "input": ["text"], "contextWindow": 32768, "maxTokens": 4096,
                          "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}}}
     setup = "import os,sys;sys.path.insert(0,'/opt/magicmtn/runtime');from agent import Supervisor;"
-    setup += f"supervisor=Supervisor({fixture!r});supervisor.lock_file.close();"
+    setup += f"supervisor=Supervisor({fixture!r});assert (supervisor.harness.directory/'extensions/magicmtn-errors/index.js').is_file();assert (supervisor.harness.directory/'extensions/magicmtn-errors/error-worker.js').is_file();supervisor.lock_file.close();"
     setup += "os.execvp('pi',['pi','--mode','rpc','--no-session','--offline'])"
     rpc = run("podman", "run", *platform_options, "--interactive", "--rm", "--network", "none", args.tag,
               "python3", "-c", setup, input='{"id":"smoke-state","type":"get_state"}\n',

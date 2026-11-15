@@ -27,6 +27,16 @@ class PiHarness:
             extension.mkdir(parents=True, exist_ok=True)
             (extension / "index.js").write_text(config["workspace_extension"])
             (extension / "package.json").write_text('{"type":"module"}')
+        extension = self.directory / "extensions" / "magicmtn-errors"
+        extension.mkdir(parents=True, exist_ok=True)
+        runtime = pathlib.Path(__file__).resolve().parents[1]
+        for source, destination in (("errors.js", "index.js"), ("error-worker.js", "error-worker.js")):
+            (extension / destination).write_text((runtime / source).read_text())
+        (extension / "package.json").write_text('{"type":"module"}')
+        atomic_json(extension / "config.json", {
+            "origin": config["origin"], "token": config["token"],
+            "ca_certificate": config.get("ca_certificate"),
+        })
         if config.get("integrations_origin"):
             extension = self.directory / "extensions" / "magicmtn-mcp"
             extension.mkdir(parents=True, exist_ok=True)

@@ -1,5 +1,5 @@
 {
-  "checksum": "b67606af822d0af9331fd7188989769ddde857ded00c8d22f80cf786bced86ad",
+  "checksum": "71ea3470807db41320d1867b3b7ad29112856af26dee16dcbd5b3c4cb90fd2ac",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -38,6 +38,7 @@
       "aarch64-apple-darwin"
     ],
     "cfg(all(target_arch = \"loongarch64\", target_os = \"linux\"))": [],
+    "cfg(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\")))": [],
     "cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))": [],
     "cfg(all(target_arch = \"wasm32\", target_os = \"wasi\"))": [],
     "cfg(all(target_arch = \"x86\", target_env = \"gnu\", not(target_abi = \"llvm\"), not(windows_raw_dylib)))": [],
@@ -51,6 +52,14 @@
     "cfg(all(target_os = \"emscripten\", wasm_bindgen_unstable_tokio))": [],
     "cfg(all(target_os = \"redox\", not(target_arch = \"wasm32\")))": [],
     "cfg(all(target_os = \"uefi\", getrandom_backend = \"efi_rng\"))": [],
+    "cfg(all(unix, not(target_os = \"android\"), not(target_vendor = \"apple\"), not(target_arch = \"wasm32\")))": [
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "cfg(all(unix, not(target_os = \"macos\")))": [
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu"
+    ],
     "cfg(any())": [],
     "cfg(any(target_arch = \"aarch64\", target_arch = \"x86\", target_arch = \"x86_64\"))": [
       "aarch64-apple-darwin",
@@ -77,12 +86,20 @@
     "cfg(any(target_os = \"macos\", target_os = \"openbsd\", target_os = \"vita\", target_os = \"emscripten\"))": [
       "aarch64-apple-darwin"
     ],
+    "cfg(any(target_vendor = \"apple\"))": [
+      "aarch64-apple-darwin"
+    ],
     "cfg(any(unix, target_os = \"hermit\", target_os = \"wasi\"))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
       "x86_64-unknown-linux-gnu"
     ],
     "cfg(any(unix, target_os = \"wasi\"))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "cfg(not(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\"))))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
       "x86_64-unknown-linux-gnu"
@@ -101,6 +118,9 @@
     "cfg(target_os = \"android\")": [],
     "cfg(target_os = \"haiku\")": [],
     "cfg(target_os = \"hermit\")": [],
+    "cfg(target_os = \"macos\")": [
+      "aarch64-apple-darwin"
+    ],
     "cfg(target_os = \"netbsd\")": [],
     "cfg(target_os = \"redox\")": [],
     "cfg(target_os = \"solaris\")": [],
@@ -624,6 +644,125 @@
         }
       ],
       "version": "1.5.1"
+    },
+    "aws-lc-rs 1.18.2": {
+      "build_script_attrs": {
+        "links": "aws_lc_rs_1_18_2_sys"
+      },
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "zeroize 1.9.0",
+            "target": "zeroize"
+          }
+        ],
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "aws_lc_rs",
+      "license": "ISC AND (Apache-2.0 OR ISC)",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC"
+      ],
+      "name": "aws-lc-rs",
+      "package_url": "https://github.com/aws/aws-lc-rs",
+      "repository": {
+        "Http": {
+          "sha256": "faac5829c2b74c28f830747e7818ccfb684261b5f48a1118b1e2a13d36dfab13",
+          "url": "https://static.crates.io/crates/aws-lc-rs/1.18.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "aws_lc_rs",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "1.18.2"
+    },
+    "aws-lc-sys 0.46.0": {
+      "build_script_attrs": {
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.6.0",
+              "target": "cc"
+            },
+            {
+              "id": "cmake 0.1.58",
+              "target": "cmake"
+            },
+            {
+              "id": "dunce 1.0.5",
+              "target": "dunce"
+            },
+            {
+              "id": "fs_extra 1.3.0",
+              "target": "fs_extra"
+            }
+          ],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "pkg-config 0.3.34",
+                "target": "pkg_config"
+              }
+            ]
+          }
+        },
+        "links": "aws_lc_0_46_0"
+      },
+      "common_attrs": {
+        "edition": "2021",
+        "extra_deps": [
+          ":build_script_main"
+        ]
+      },
+      "library_target_name": "aws_lc_sys",
+      "license": "ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0",
+        "BSD-3-Clause",
+        "ISC",
+        "MIT",
+        "MIT-0"
+      ],
+      "name": "aws-lc-sys",
+      "package_url": "https://github.com/aws/aws-lc-rs",
+      "repository": {
+        "Http": {
+          "sha256": "f1622d8446a2d4b2ce0c7eefc73dd43a99779028d5ee5c2dd8073a658ba8a2bc",
+          "url": "https://static.crates.io/crates/aws-lc-sys/0.46.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "aws_lc_sys",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_main",
+            "crate_root": "builder/main.rs"
+          }
+        }
+      ],
+      "version": "0.46.0"
     },
     "axum 0.7.9": {
       "common_attrs": {
@@ -1553,6 +1692,41 @@
       ],
       "version": "1.1.1"
     },
+    "cmake 0.1.58": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "cc 1.6.0",
+            "target": "cc"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "cmake",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "cmake",
+      "package_url": "https://github.com/rust-lang/cmake-rs",
+      "repository": {
+        "Http": {
+          "sha256": "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678",
+          "url": "https://static.crates.io/crates/cmake/0.1.58/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cmake",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.58"
+    },
     "colorchoice 1.0.5": {
       "common_attrs": {
         "edition": "2021"
@@ -1581,6 +1755,40 @@
         }
       ],
       "version": "1.0.5"
+    },
+    "combine 4.6.9": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "memchr 2.8.3",
+            "target": "memchr"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "combine",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "combine",
+      "package_url": "https://github.com/Marwes/combine",
+      "repository": {
+        "Http": {
+          "sha256": "4356eba6976435498d05a311ee9fc486da3bc81c200d3f0d7dd9703b41913f92",
+          "url": "https://static.crates.io/crates/combine/4.6.9/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "combine",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "4.6.9"
     },
     "const-oid 0.9.6": {
       "common_attrs": {
@@ -1644,6 +1852,45 @@
         }
       ],
       "version": "0.10.0"
+    },
+    "core-foundation 0.10.1": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "core-foundation-sys 0.8.7",
+            "target": "core_foundation_sys"
+          },
+          {
+            "id": "libc 0.2.190",
+            "target": "libc"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "core_foundation",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "core-foundation",
+      "package_url": "https://github.com/servo/core-foundation-rs",
+      "repository": {
+        "Http": {
+          "sha256": "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6",
+          "url": "https://static.crates.io/crates/core-foundation/0.10.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "core_foundation",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.10.1"
     },
     "core-foundation-sys 0.8.7": {
       "common_attrs": {
@@ -2531,6 +2778,36 @@
       ],
       "version": "0.15.7"
     },
+    "dunce 1.0.5": {
+      "common_attrs": {
+        "edition": "2021"
+      },
+      "library_target_name": "dunce",
+      "license": "CC0-1.0 OR MIT-0 OR Apache-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0",
+        "CC0-1.0",
+        "MIT-0"
+      ],
+      "name": "dunce",
+      "package_url": "https://gitlab.com/kornelski/dunce",
+      "repository": {
+        "Http": {
+          "sha256": "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813",
+          "url": "https://static.crates.io/crates/dunce/1.0.5/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dunce",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.5"
+    },
     "either 1.18.0": {
       "common_attrs": {
         "crate_features": [
@@ -3025,6 +3302,34 @@
         }
       ],
       "version": "1.2.2"
+    },
+    "fs_extra 1.3.0": {
+      "common_attrs": {
+        "edition": "2018"
+      },
+      "library_target_name": "fs_extra",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "fs_extra",
+      "package_url": "https://github.com/webdesus/fs_extra",
+      "repository": {
+        "Http": {
+          "sha256": "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c",
+          "url": "https://static.crates.io/crates/fs_extra/1.3.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fs_extra",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.3.0"
     },
     "futures-channel 0.3.34": {
       "common_attrs": {
@@ -4246,7 +4551,7 @@
             "target": "hyper_util"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -4262,7 +4567,7 @@
             "target": "tower_service"
           },
           {
-            "id": "webpki-roots 1.0.9",
+            "id": "webpki-roots 1.0.12",
             "target": "webpki_roots"
           }
         ],
@@ -5111,6 +5416,275 @@
         }
       ],
       "version": "1.0.18"
+    },
+    "jni 0.22.4": {
+      "build_script_attrs": {
+        "deps": [
+          {
+            "id": "walkdir 2.5.0",
+            "target": "walkdir"
+          }
+        ]
+      },
+      "common_attrs": {
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.5",
+              "target": "cfg_if"
+            },
+            {
+              "id": "combine 4.6.9",
+              "target": "combine"
+            },
+            {
+              "id": "jni-sys 0.4.1",
+              "target": "jni_sys"
+            },
+            {
+              "id": "log 0.4.34",
+              "target": "log"
+            },
+            {
+              "id": "simd_cesu8 1.2.0",
+              "target": "simd_cesu8"
+            },
+            {
+              "id": "thiserror 2.0.21",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "windows-link 0.2.1",
+                "target": "windows_link"
+              }
+            ]
+          }
+        },
+        "edition": "2024",
+        "extra_deps": [
+          ":build_script_build"
+        ],
+        "proc_macro_deps": [
+          {
+            "id": "jni-macros 0.22.4",
+            "target": "jni_macros"
+          }
+        ]
+      },
+      "library_target_name": "jni",
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "jni",
+      "package_url": "https://github.com/jni-rs/jni-rs",
+      "repository": {
+        "Http": {
+          "sha256": "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498",
+          "url": "https://static.crates.io/crates/jni/0.22.4/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "jni",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.22.4"
+    },
+    "jni-macros 0.22.4": {
+      "build_script_attrs": {
+        "deps": [
+          {
+            "id": "rustc_version 0.4.1",
+            "target": "rustc_version"
+          }
+        ]
+      },
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "proc-macro2 1.0.107",
+            "target": "proc_macro2"
+          },
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "simd_cesu8 1.2.0",
+            "target": "simd_cesu8"
+          },
+          {
+            "id": "syn 2.0.119",
+            "target": "syn"
+          }
+        ],
+        "edition": "2024",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "jni_macros",
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "jni-macros",
+      "package_url": "https://github.com/jni-rs/jni-rs",
+      "repository": {
+        "Http": {
+          "sha256": "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3",
+          "url": "https://static.crates.io/crates/jni-macros/0.22.4/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "jni_macros",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.22.4"
+    },
+    "jni-sys 0.4.1": {
+      "common_attrs": {
+        "edition": "2021",
+        "proc_macro_deps": [
+          {
+            "id": "jni-sys-macros 0.4.1",
+            "target": "jni_sys_macros"
+          }
+        ]
+      },
+      "library_target_name": "jni_sys",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "jni-sys",
+      "package_url": "https://github.com/jni-rs/jni-sys",
+      "repository": {
+        "Http": {
+          "sha256": "c6377a88cb3910bee9b0fa88d4f42e1d2da8e79915598f65fb0c7ee14c878af2",
+          "url": "https://static.crates.io/crates/jni-sys/0.4.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "jni_sys",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.4.1"
+    },
+    "jni-sys-macros 0.4.1": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "quote 1.0.47",
+            "target": "quote"
+          },
+          {
+            "id": "syn 2.0.119",
+            "target": "syn"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "jni_sys_macros",
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "jni-sys-macros",
+      "package_url": "https://github.com/jni-rs/jni-sys",
+      "repository": {
+        "Http": {
+          "sha256": "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264",
+          "url": "https://static.crates.io/crates/jni-sys-macros/0.4.1/download"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "jni_sys_macros",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.4.1"
+    },
+    "jobserver 0.1.35": {
+      "common_attrs": {
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.190",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "getrandom 0.4.3",
+                "target": "getrandom"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "jobserver",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "jobserver",
+      "package_url": "https://github.com/rust-lang/jobserver-rs",
+      "repository": {
+        "Http": {
+          "sha256": "1c00acbd29eabad4a2392fa0e921c874934dbbf4194312ad20f04a0ed67a3cb3",
+          "url": "https://static.crates.io/crates/jobserver/0.1.35/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "jobserver",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.35"
     },
     "js-sys 0.3.106": {
       "common_attrs": {
@@ -6549,6 +7123,35 @@
       ],
       "version": "1.70.2"
     },
+    "openssl-probe 0.2.2": {
+      "common_attrs": {
+        "edition": "2021"
+      },
+      "library_target_name": "openssl_probe",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "openssl-probe",
+      "package_url": "https://github.com/rustls/openssl-probe",
+      "repository": {
+        "Http": {
+          "sha256": "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1",
+          "url": "https://static.crates.io/crates/openssl-probe/0.2.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "openssl_probe",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.2"
+    },
     "parking 2.2.1": {
       "common_attrs": {
         "edition": "2018"
@@ -7767,7 +8370,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "rustls 0.23.45",
+              "id": "rustls 0.23.46",
               "target": "rustls"
             },
             {
@@ -7799,7 +8402,7 @@
               "target": "url"
             },
             {
-              "id": "webpki-roots 1.0.9",
+              "id": "webpki-roots 1.0.12",
               "target": "webpki_roots"
             }
           ],
@@ -7896,6 +8499,129 @@
         }
       ],
       "version": "0.12.28"
+    },
+    "reqwest 0.13.5": {
+      "common_attrs": {
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.23.1",
+              "target": "base64"
+            },
+            {
+              "id": "bytes 1.12.1",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.34",
+              "target": "futures_core"
+            },
+            {
+              "id": "http 1.5.0",
+              "target": "http"
+            },
+            {
+              "id": "sync_wrapper 1.0.2",
+              "target": "sync_wrapper"
+            },
+            {
+              "id": "url 2.5.8",
+              "target": "url"
+            }
+          ],
+          "selects": {
+            "cfg(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\")))": [
+              {
+                "id": "js-sys 0.3.106",
+                "target": "js_sys"
+              },
+              {
+                "id": "wasm-bindgen 0.2.129",
+                "target": "wasm_bindgen"
+              },
+              {
+                "id": "wasm-bindgen-futures 0.4.79",
+                "target": "wasm_bindgen_futures"
+              },
+              {
+                "id": "web-sys 0.3.106",
+                "target": "web_sys"
+              }
+            ],
+            "cfg(not(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\"))))": [
+              {
+                "id": "http-body 1.1.0",
+                "target": "http_body"
+              },
+              {
+                "id": "http-body-util 0.1.5",
+                "target": "http_body_util"
+              },
+              {
+                "id": "hyper 1.11.1",
+                "target": "hyper"
+              },
+              {
+                "id": "hyper-util 0.1.21",
+                "target": "hyper_util"
+              },
+              {
+                "id": "log 0.4.34",
+                "target": "log"
+              },
+              {
+                "id": "percent-encoding 2.3.2",
+                "target": "percent_encoding"
+              },
+              {
+                "id": "pin-project-lite 0.2.17",
+                "target": "pin_project_lite"
+              },
+              {
+                "id": "tokio 1.53.2",
+                "target": "tokio"
+              },
+              {
+                "id": "tower 0.5.3",
+                "target": "tower"
+              },
+              {
+                "id": "tower-http 0.6.11",
+                "target": "tower_http"
+              },
+              {
+                "id": "tower-service 0.3.3",
+                "target": "tower_service"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "reqwest",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "reqwest",
+      "package_url": "https://github.com/seanmonstar/reqwest",
+      "repository": {
+        "Http": {
+          "sha256": "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029",
+          "url": "https://static.crates.io/crates/reqwest/0.13.5/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "reqwest",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.13.5"
     },
     "ring 0.17.14": {
       "build_script_attrs": {
@@ -8231,7 +8957,7 @@
       ],
       "version": "1.1.5"
     },
-    "rustls 0.23.45": {
+    "rustls 0.23.46": {
       "build_script_attrs": {
         "link_deps": [
           {
@@ -8242,11 +8968,17 @@
       },
       "common_attrs": {
         "crate_features": [
+          "log",
+          "logging",
           "ring",
           "std",
           "tls12"
         ],
         "deps": [
+          {
+            "id": "log 0.4.34",
+            "target": "log"
+          },
           {
             "id": "once_cell 1.21.4",
             "target": "once_cell"
@@ -8290,8 +9022,8 @@
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "sha256": "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634",
-          "url": "https://static.crates.io/crates/rustls/0.23.45/download"
+          "sha256": "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf",
+          "url": "https://static.crates.io/crates/rustls/0.23.46/download"
         }
       },
       "targets": [
@@ -8308,7 +9040,66 @@
           }
         }
       ],
-      "version": "0.23.45"
+      "version": "0.23.46"
+    },
+    "rustls-native-certs 0.8.5": {
+      "common_attrs": {
+        "deps": {
+          "common": [
+            {
+              "alias": "pki_types",
+              "id": "rustls-pki-types 1.15.1",
+              "target": "rustls_pki_types"
+            }
+          ],
+          "selects": {
+            "cfg(all(unix, not(target_os = \"macos\")))": [
+              {
+                "id": "openssl-probe 0.2.2",
+                "target": "openssl_probe"
+              }
+            ],
+            "cfg(target_os = \"macos\")": [
+              {
+                "id": "security-framework 3.7.0",
+                "target": "security_framework"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "schannel 0.1.30",
+                "target": "schannel"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "rustls_native_certs",
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "name": "rustls-native-certs",
+      "package_url": "https://github.com/rustls/rustls-native-certs",
+      "repository": {
+        "Http": {
+          "sha256": "4a073f5dc7469f984c52ad2752b63b0807745133b6de880b7b64c1ac4c48aec4",
+          "url": "https://static.crates.io/crates/rustls-native-certs/0.8.5/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_native_certs",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.5"
     },
     "rustls-pki-types 1.15.1": {
       "common_attrs": {
@@ -8349,6 +9140,139 @@
         }
       ],
       "version": "1.15.1"
+    },
+    "rustls-platform-verifier 0.7.1": {
+      "common_attrs": {
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.34",
+              "target": "log"
+            },
+            {
+              "id": "rustls 0.23.46",
+              "target": "rustls"
+            }
+          ],
+          "selects": {
+            "cfg(all(unix, not(target_os = \"android\"), not(target_vendor = \"apple\"), not(target_arch = \"wasm32\")))": [
+              {
+                "id": "rustls-native-certs 0.8.5",
+                "target": "rustls_native_certs"
+              },
+              {
+                "id": "rustls-webpki 0.103.15",
+                "target": "webpki"
+              }
+            ],
+            "cfg(any(target_vendor = \"apple\"))": [
+              {
+                "id": "core-foundation 0.10.1",
+                "target": "core_foundation"
+              },
+              {
+                "id": "core-foundation-sys 0.8.7",
+                "target": "core_foundation_sys"
+              },
+              {
+                "id": "security-framework 3.7.0",
+                "target": "security_framework"
+              },
+              {
+                "id": "security-framework-sys 2.17.0",
+                "target": "security_framework_sys"
+              }
+            ],
+            "cfg(target_arch = \"wasm32\")": [
+              {
+                "id": "rustls-webpki 0.103.15",
+                "target": "webpki"
+              },
+              {
+                "id": "webpki-root-certs 1.0.12",
+                "target": "webpki_root_certs"
+              }
+            ],
+            "cfg(target_os = \"android\")": [
+              {
+                "id": "jni 0.22.4",
+                "target": "jni"
+              },
+              {
+                "id": "once_cell 1.21.4",
+                "target": "once_cell"
+              },
+              {
+                "id": "rustls-platform-verifier-android 0.2.0",
+                "target": "rustls_platform_verifier_android"
+              },
+              {
+                "id": "rustls-webpki 0.103.15",
+                "target": "webpki"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.61.2",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "rustls_platform_verifier",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "rustls-platform-verifier",
+      "package_url": "https://github.com/rustls/rustls-platform-verifier",
+      "repository": {
+        "Http": {
+          "sha256": "1167586491e2b18b8bfbb293e8180ec17c201c4f076d7cb3070ca964e7598f98",
+          "url": "https://static.crates.io/crates/rustls-platform-verifier/0.7.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_platform_verifier",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.7.1"
+    },
+    "rustls-platform-verifier-android 0.2.0": {
+      "common_attrs": {
+        "edition": "2021"
+      },
+      "library_target_name": "rustls_platform_verifier_android",
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "rustls-platform-verifier-android",
+      "package_url": "https://github.com/rustls/rustls-platform-verifier",
+      "repository": {
+        "Http": {
+          "sha256": "eec689c0bc40ff2458a5977b6619cb718087084a18e02a131c599b62d05e1a5f",
+          "url": "https://static.crates.io/crates/rustls-platform-verifier-android/0.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_platform_verifier_android",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.0"
     },
     "rustls-webpki 0.103.15": {
       "common_attrs": {
@@ -8466,6 +9390,80 @@
       ],
       "version": "1.0.23"
     },
+    "same-file 1.0.6": {
+      "common_attrs": {
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "winapi-util 0.1.11",
+                "target": "winapi_util"
+              }
+            ]
+          }
+        },
+        "edition": "2018"
+      },
+      "library_target_name": "same_file",
+      "license": "Unlicense/MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "name": "same-file",
+      "package_url": "https://github.com/BurntSushi/same-file",
+      "repository": {
+        "Http": {
+          "sha256": "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502",
+          "url": "https://static.crates.io/crates/same-file/1.0.6/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "same_file",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.6"
+    },
+    "schannel 0.1.30": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "windows-sys 0.61.2",
+            "target": "windows_sys"
+          }
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "schannel",
+      "license": "MIT",
+      "license_file": "LICENSE.md",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "schannel",
+      "package_url": "https://github.com/steffengy/schannel-rs",
+      "repository": {
+        "Http": {
+          "sha256": "9cb23c424d8ee841bb4d813677ca237e2a610067d594fec130f87d6093495ab5",
+          "url": "https://static.crates.io/crates/schannel/0.1.30/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "schannel",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.30"
+    },
     "scopeguard 1.2.0": {
       "common_attrs": {
         "edition": "2015"
@@ -8494,6 +9492,96 @@
         }
       ],
       "version": "1.2.0"
+    },
+    "security-framework 3.7.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "bitflags 2.13.2",
+            "target": "bitflags"
+          },
+          {
+            "id": "core-foundation 0.10.1",
+            "target": "core_foundation"
+          },
+          {
+            "id": "core-foundation-sys 0.8.7",
+            "target": "core_foundation_sys"
+          },
+          {
+            "id": "libc 0.2.190",
+            "target": "libc"
+          },
+          {
+            "id": "security-framework-sys 2.17.0",
+            "target": "security_framework_sys"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "security_framework",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "security-framework",
+      "package_url": "https://github.com/kornelski/rust-security-framework",
+      "repository": {
+        "Http": {
+          "sha256": "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d",
+          "url": "https://static.crates.io/crates/security-framework/3.7.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "security_framework",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "3.7.0"
+    },
+    "security-framework-sys 2.17.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "core-foundation-sys 0.8.7",
+            "target": "core_foundation_sys"
+          },
+          {
+            "id": "libc 0.2.190",
+            "target": "libc"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "security_framework_sys",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "security-framework-sys",
+      "package_url": "https://github.com/kornelski/rust-security-framework",
+      "repository": {
+        "Http": {
+          "sha256": "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3",
+          "url": "https://static.crates.io/crates/security-framework-sys/2.17.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "security_framework_sys",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "2.17.0"
     },
     "semver 1.0.28": {
       "common_attrs": {
@@ -8540,12 +9628,17 @@
       "common_attrs": {
         "crate_features": [
           "httpdate",
+          "rustls",
           "ureq"
         ],
         "deps": [
           {
             "id": "httpdate 1.0.3",
             "target": "httpdate"
+          },
+          {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
           },
           {
             "id": "sentry-core 0.49.3",
@@ -9452,6 +10545,77 @@
       ],
       "version": "0.3.10"
     },
+    "simd_cesu8 1.2.0": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "simdutf8 0.1.5",
+            "target": "simdutf8"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "simd_cesu8",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "simd_cesu8",
+      "package_url": "https://github.com/seancroach/simd_cesu8",
+      "repository": {
+        "Http": {
+          "sha256": "11031e251abf8611c80f460e19dbdeb54a66db918e49c65a7065b46ac7aec520",
+          "url": "https://static.crates.io/crates/simd_cesu8/1.2.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simd_cesu8",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.2.0"
+    },
+    "simdutf8 0.1.5": {
+      "common_attrs": {
+        "crate_features": [
+          "std"
+        ],
+        "edition": "2018"
+      },
+      "library_target_name": "simdutf8",
+      "license": "MIT OR Apache-2.0",
+      "license_file": "LICENSE-Apache",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "simdutf8",
+      "package_url": "https://github.com/rusticstuff/simdutf8",
+      "repository": {
+        "Http": {
+          "sha256": "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e",
+          "url": "https://static.crates.io/crates/simdutf8/0.1.5/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simdutf8",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.5"
+    },
     "slab 0.4.12": {
       "common_attrs": {
         "crate_features": [
@@ -9819,7 +10983,7 @@
             "target": "percent_encoding"
           },
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -11503,7 +12667,7 @@
         ],
         "deps": [
           {
-            "id": "rustls 0.23.45",
+            "id": "rustls 0.23.46",
             "target": "rustls"
           },
           {
@@ -12604,6 +13768,14 @@
     },
     "ureq 3.5.0": {
       "common_attrs": {
+        "crate_features": [
+          "_ring",
+          "_rustls",
+          "_tls",
+          "rustls",
+          "rustls-no-provider",
+          "rustls-webpki-roots"
+        ],
         "deps": [
           {
             "id": "base64 0.23.1",
@@ -12618,12 +13790,24 @@
             "target": "percent_encoding"
           },
           {
+            "id": "rustls 0.23.46",
+            "target": "rustls"
+          },
+          {
+            "id": "rustls-pki-types 1.15.1",
+            "target": "rustls_pki_types"
+          },
+          {
             "id": "ureq-proto 0.6.5",
             "target": "ureq_proto"
           },
           {
             "id": "utf8-zero 0.8.1",
             "target": "utf8_zero"
+          },
+          {
+            "id": "webpki-roots 1.0.12",
+            "target": "webpki_roots"
           }
         ],
         "edition": "2024"
@@ -13024,6 +14208,51 @@
         }
       ],
       "version": "0.9.5"
+    },
+    "walkdir 2.5.0": {
+      "common_attrs": {
+        "deps": {
+          "common": [
+            {
+              "id": "same-file 1.0.6",
+              "target": "same_file"
+            }
+          ],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "winapi-util 0.1.11",
+                "target": "winapi_util"
+              }
+            ]
+          }
+        },
+        "edition": "2018"
+      },
+      "library_target_name": "walkdir",
+      "license": "Unlicense/MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "name": "walkdir",
+      "package_url": "https://github.com/BurntSushi/walkdir",
+      "repository": {
+        "Http": {
+          "sha256": "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b",
+          "url": "https://static.crates.io/crates/walkdir/2.5.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "walkdir",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "2.5.0"
     },
     "want 0.3.2": {
       "common_attrs": {
@@ -13459,12 +14688,47 @@
       ],
       "version": "1.1.0"
     },
+    "webpki-root-certs 1.0.12": {
+      "common_attrs": {
+        "deps": [
+          {
+            "alias": "pki_types",
+            "id": "rustls-pki-types 1.15.1",
+            "target": "rustls_pki_types"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "webpki_root_certs",
+      "license": "CDLA-Permissive-2.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "CDLA-Permissive-2.0"
+      ],
+      "name": "webpki-root-certs",
+      "package_url": "https://github.com/rustls/webpki-roots",
+      "repository": {
+        "Http": {
+          "sha256": "293198dcebfb821155b5092ab94b5a82ff180eddd7241df3bd6e66a4ffd1a585",
+          "url": "https://static.crates.io/crates/webpki-root-certs/1.0.12/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "webpki_root_certs",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.0.12"
+    },
     "webpki-roots 0.26.11": {
       "common_attrs": {
         "deps": [
           {
             "alias": "parent",
-            "id": "webpki-roots 1.0.9",
+            "id": "webpki-roots 1.0.12",
             "target": "webpki_roots"
           }
         ],
@@ -13494,7 +14758,7 @@
       ],
       "version": "0.26.11"
     },
-    "webpki-roots 1.0.9": {
+    "webpki-roots 1.0.12": {
       "common_attrs": {
         "deps": [
           {
@@ -13515,8 +14779,8 @@
       "package_url": "https://github.com/rustls/webpki-roots",
       "repository": {
         "Http": {
-          "sha256": "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a",
-          "url": "https://static.crates.io/crates/webpki-roots/1.0.9/download"
+          "sha256": "7265c9301c16a8711c992c2d8da90ee77ef54b1ed51482d6dfeb00dc756b1297",
+          "url": "https://static.crates.io/crates/webpki-roots/1.0.12/download"
         }
       },
       "targets": [
@@ -13527,7 +14791,7 @@
           }
         }
       ],
-      "version": "1.0.9"
+      "version": "1.0.12"
     },
     "whoami 1.6.1": {
       "common_attrs": {
@@ -13669,6 +14933,46 @@
         }
       ],
       "version": "0.4.0"
+    },
+    "winapi-util 0.1.11": {
+      "common_attrs": {
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.48.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021"
+      },
+      "library_target_name": "winapi_util",
+      "license": "Unlicense OR MIT",
+      "license_file": "LICENSE-MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "name": "winapi-util",
+      "package_url": "https://github.com/BurntSushi/winapi-util",
+      "repository": {
+        "Http": {
+          "sha256": "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22",
+          "url": "https://static.crates.io/crates/winapi-util/0.1.11/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "winapi_util",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.11"
     },
     "winapi-x86_64-pc-windows-gnu 0.4.0": {
       "build_script_attrs": {},

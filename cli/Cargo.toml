@@ -35,7 +35,7 @@ ring = "0.17.14"
 crossterm = "0.29"
 futures-util = "0.3"
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
-sentry = { version = "0.49.3", default-features = false, features = ["ureq"] }
+sentry = { version = "0.49.3", default-features = false, features = ["ureq", "rustls"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 [dev-dependencies]

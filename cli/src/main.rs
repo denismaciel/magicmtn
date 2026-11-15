@@ -592,7 +592,9 @@ async fn main() -> Result<()> {
         _ => None,
     };
     let server_url = cli.server_url()?;
-    let operation = operation.filter(|_| server_url == "https://api.magicmtn.ai");
+    let operation = operation.filter(|_| {
+        server_url == "https://api.magicmtn.ai" && configuration::error_reporting().unwrap_or(false)
+    });
     let sentry = operation.map(|_| telemetry::init());
     let result = run(cli).await;
     if let (Some(operation), Err(error)) = (operation, &result) {

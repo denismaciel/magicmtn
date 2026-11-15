@@ -59,6 +59,15 @@ class EnvironmentTests(unittest.TestCase):
                          {"defaultProvider": "magicmtn", "defaultModel": "test-model"})
         self.assertTrue((config_dir / "extensions/magicmtn-mcp/index.js").is_file())
         self.assertTrue((config_dir / "extensions/magicmtn-workspace/index.js").is_file())
+        reporter = config_dir / "extensions/magicmtn-errors"
+        self.assertTrue((reporter / "index.js").is_file())
+        self.assertTrue((reporter / "error-worker.js").is_file())
+        self.assertEqual(json.loads((reporter / "config.json").read_text()), {
+            "origin": "https://gateway.example.test", "token": "scoped-test-token",
+            "ca_certificate": "test CA",
+        })
+        self.assertEqual((reporter / "config.json").stat().st_mode & 0o777, 0o600)
+        self.assertFalse(any("ERROR_REPORTING" in key or "SENTRY" in key for key in managed))
         self.assertEqual(json.loads(pathlib.Path(shell["MAGICMTN_INTEGRATIONS_CONFIG"]).read_text())["token"],
                          "scoped-test-token")
         self.assertEqual(pathlib.Path(shell["NODE_EXTRA_CA_CERTS"]).read_text(), "test CA")

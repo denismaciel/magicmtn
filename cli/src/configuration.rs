@@ -9,10 +9,22 @@ use std::{
 };
 use uuid::Uuid;
 
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 struct Config {
     local_sandbox: bool,
+    error_reporting: bool,
+}
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            local_sandbox: false,
+            error_reporting: true,
+        }
+    }
+}
+pub(crate) fn error_reporting() -> Result<bool> {
+    Ok(read(&directory()?.join("config"))?.error_reporting)
 }
 pub(crate) fn directory() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("MAGICMTN_CONFIG_DIRECTORY") {
@@ -25,12 +37,9 @@ pub(crate) fn directory() -> Result<PathBuf> {
 }
 fn read(path: &Path) -> Result<Config> {
     match fs::read_to_string(path) {
-        Ok(text) => toml::from_str(&text).with_context(|| {
-            format!(
-                "invalid TOML in {} (use local-sandbox = true)",
-                path.display()
-            )
-        }),
+        Ok(text) => {
+            toml::from_str(&text).with_context(|| format!("invalid TOML in {}", path.display()))
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
         Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
     }
@@ -44,7 +53,9 @@ fn provider() -> Result<&'static str> {
 }
 pub(crate) fn creation_body(api: &Api, mut body: Value) -> Result<Value> {
     let root = directory()?;
-    if read(&root.join("config"))?.local_sandbox {
+    let config = read(&root.join("config"))?;
+    body["error_reporting"] = json!(config.error_reporting);
+    if config.local_sandbox {
         provider()?;
         let bindings: Value = serde_json::from_slice(
             &fs::read(root.join("local-connections.json"))
@@ -59,6 +70,24 @@ pub(crate) fn creation_body(api: &Api, mut body: Value) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn error_reporting_defaults_on_and_accepts_only_boolean_opt_out() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config");
+        assert!(read(&path).unwrap().error_reporting);
+        for (text, expected) in [
+            ("", true),
+            ("error-reporting = true", true),
+            ("error-reporting = false", false),
+            ("local-sandbox = true\nerror-reporting = false", false),
+        ] {
+            fs::write(&path, text).unwrap();
+            assert_eq!(read(&path).unwrap().error_reporting, expected);
+        }
+        fs::write(&path, "error-reporting = 'false'").unwrap();
+        assert!(read(&path).is_err());
+    }
+
     #[test]
     fn config_is_opt_in_and_strict() {
         let root = tempfile::tempdir().unwrap();
