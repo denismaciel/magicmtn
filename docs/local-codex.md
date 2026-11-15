@@ -10,7 +10,7 @@ Install the [MagicMtn CLI](../README.md#install) and [Apple Container](https://g
 container system start
 magic provider install apple-container
 magic logout
-MAGICMTN_APPLE_CONTAINER_NETWORK=default magic server start
+magic server start --network default
 ```
 
 Keep the server terminal open. The network setting gives new sandboxes internet access. To change it on an existing local installation, stop the server first with `magic server stop`, then start it with the command above.

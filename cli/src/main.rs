@@ -158,6 +158,9 @@ enum ServerCommands {
         bind: std::net::SocketAddr,
         #[arg(long, default_value_t = 86400, value_parser = clap::value_parser!(u32).range(1..=86400))]
         ttl_seconds: u32,
+        /// Apple Container network for new sandboxes; use default for internet access
+        #[arg(long, value_parser = magicmtn_local::network_name)]
+        network: Option<String>,
     },
 }
 
@@ -617,7 +620,11 @@ async fn run(cli: Cli) -> Result<()> {
     };
     if let Commands::Server { command } = command {
         return match command {
-            ServerCommands::Start { bind, ttl_seconds } => {
+            ServerCommands::Start {
+                bind,
+                ttl_seconds,
+                network,
+            } => {
                 let transition = mode::transition()?;
                 authentication::Credentials::new()?
                     .ensure_signed_out()
@@ -628,6 +635,7 @@ async fn run(cli: Cli) -> Result<()> {
                 magicmtn_local::run(magicmtn_local::Options {
                     bind,
                     ttl_seconds,
+                    network,
                     directory,
                     provider_directory: configuration::directory()?.join("providers"),
                 })
@@ -997,4 +1005,22 @@ fn pi_attach_rejects_removed_relay_options() {
     assert!(Cli::try_parse_from(["magic", "pi", "attach", id]).is_ok());
     assert!(Cli::try_parse_from(["magic", "pi", "attach", id, "--relay-from", "/repo"]).is_err());
     assert!(Cli::try_parse_from(["magic", "pi", "relay", id, "/repo"]).is_err());
+}
+
+#[cfg(test)]
+#[test]
+fn local_server_accepts_explicit_network_names() {
+    for name in ["default", "none", "my-network.1", "local_net"] {
+        let cli = Cli::try_parse_from(["magic", "server", "start", "--network", name]).unwrap();
+        let Some(Commands::Server {
+            command: ServerCommands::Start { network, .. },
+        }) = cli.command
+        else {
+            panic!("expected server start");
+        };
+        assert_eq!(network.as_deref(), Some(name));
+    }
+    for name in ["", "bad network", "a/b", ";echo", &"x".repeat(129)] {
+        assert!(Cli::try_parse_from(["magic", "server", "start", "--network", name]).is_err());
+    }
 }

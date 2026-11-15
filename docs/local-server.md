@@ -63,6 +63,7 @@ Stop the server before installing or uninstalling providers. Keep provider relea
 
 | Setting | Purpose |
 | --- | --- |
+| `--network default` | Give new Apple Container sandboxes internet access. Use `--network none` for an isolated network. |
 | `--bind 127.0.0.1:PORT` | Choose the local server port. The listener must use a loopback address. |
 | `MAGICMTN_CONFIG_DIRECTORY` | Change the CLI configuration and installed-provider directory from `~/.config/magicmtn`. |
 | `MAGICMTN_LOCAL_DIRECTORY` | Override the local server's database, credential, and lock directory. Set it for both the server and local CLI commands. |

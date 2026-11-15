@@ -30,6 +30,20 @@ pub struct Options {
     pub directory: PathBuf,
     pub provider_directory: PathBuf,
     pub ttl_seconds: u32,
+    pub network: Option<String>,
+}
+
+/// Apple Container accepts a network name or `none`.
+pub fn network_name(value: &str) -> Result<String> {
+    ensure!(
+        !value.is_empty()
+            && value.len() <= 128
+            && value
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c)),
+        "use a network name containing letters, numbers, periods, underscores, or hyphens"
+    );
+    Ok(value.to_owned())
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -241,7 +255,19 @@ pub async fn run(options: Options) -> Result<()> {
         .try_lock_shared()
         .context("provider store is being modified")?;
     let registry = Registry::new(options.provider_directory)?;
-    database.bootstrap(&registry).await?;
+    let mut overrides = std::collections::BTreeMap::new();
+    if let Some(network) = &options.network {
+        overrides.insert(
+            "apple-container".into(),
+            std::collections::BTreeMap::from([(
+                "MAGICMTN_APPLE_CONTAINER_NETWORK".into(),
+                network_name(network)?,
+            )]),
+        );
+    }
+    database
+        .bootstrap_with_configuration(&registry, &overrides)
+        .await?;
     let store = Store::Sqlite(database.clone());
     let listener = tokio::net::TcpListener::bind(options.bind).await?;
     let info = save_connection(

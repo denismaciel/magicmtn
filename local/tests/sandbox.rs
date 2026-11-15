@@ -604,3 +604,50 @@ async fn local_shell_requires_authentication_and_an_enabled_connection() -> anyh
     db.pool.close().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn explicit_configuration_is_frozen_per_sandbox() -> anyhow::Result<()> {
+    use std::collections::BTreeMap;
+    let directory = tempfile::tempdir()?;
+    let db = Database::open(&directory.path().join("state.sqlite3")).await?;
+    let registry = provider(directory.path())?;
+    let overrides = |network: &str| {
+        BTreeMap::from([(
+            "test-local".into(),
+            BTreeMap::from([("MAGICMTN_APPLE_CONTAINER_NETWORK".into(), network.into())]),
+        )])
+    };
+    db.bootstrap_with_configuration(&registry, &overrides("default"))
+        .await?;
+    let app = router(
+        Store::Sqlite(db.clone()),
+        registry.clone(),
+        TOKEN.into(),
+        3600,
+    );
+    let (status, saved) = request(
+        &app,
+        "POST",
+        "/v1/sandboxes",
+        json!({"provider":"test-local","template":"image:alpine"}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(
+        saved["metadata"]["_magicmtn_connection"]["configuration"]
+            ["MAGICMTN_APPLE_CONTAINER_NETWORK"],
+        "default"
+    );
+    db.bootstrap_with_configuration(&registry, &overrides("none"))
+        .await?;
+    let binding = db.binding(None, None, "test-local").await?;
+    assert_eq!(
+        binding.configuration["MAGICMTN_APPLE_CONTAINER_NETWORK"],
+        "none"
+    );
+    let id = Uuid::parse_str(saved["id"].as_str().unwrap())?;
+    assert_eq!(db.get(id).await?.unwrap()["metadata"], saved["metadata"]);
+    registry.shutdown().await;
+    db.pool.close().await;
+    Ok(())
+}

@@ -55,12 +55,25 @@ impl Database {
         })
     }
     pub async fn bootstrap(&self, registry: &Registry) -> Result<()> {
+        self.bootstrap_with_configuration(registry, &Default::default())
+            .await
+    }
+
+    pub async fn bootstrap_with_configuration(
+        &self,
+        registry: &Registry,
+        overrides: &std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
+    ) -> Result<()> {
         for release in registry.list()?.into_iter().filter(|r| {
             r.active
                 && r.package.os == std::env::consts::OS
                 && r.package.arch == std::env::consts::ARCH
         }) {
             let name = &release.package.name;
+            let mut configuration = crate::provider_connections::local_configuration(name);
+            if let Some(values) = overrides.get(name) {
+                configuration.extend(values.clone());
+            }
             let binding = Binding {
                 connection_id: Uuid::new_v4(),
                 organization_id: self.id,
@@ -68,7 +81,7 @@ impl Database {
                 connection_ref: format!("connection:self-{name}"),
                 pin: release.pin(),
                 manifest: release.manifest.clone(),
-                configuration: crate::provider_connections::local_configuration(name),
+                configuration,
                 credential_mode: "managed".into(),
                 credential_ref: Some(format!("local:{name}")),
                 runner_id: None,
