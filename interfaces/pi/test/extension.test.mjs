@@ -3,7 +3,6 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import workspaceStatus from "../workspace.js";
 import { DefaultPicker } from "../picker.js";
@@ -116,7 +115,7 @@ test("signed-in menu shows the account name without authentication options", asy
   assert.ok(!f.menus[0].items.includes("Sign in"));
   assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"]]);
   assert.equal(f.menus[0].items[0], "Default (Model)");
-  assert.equal(f.menus[0].items[1], "View sandboxes");
+  assert.deepEqual(f.menus[0].items, ["Default (Model)", "View sandboxes", "New workspace", "Inference only"]);
   assert.ok(!f.menus[0].items.includes("Open workspace"));
   assert.ok(!f.menus[0].items.includes("Terminate workspace"));
 });
@@ -198,25 +197,13 @@ test("creates the default workspace without selection menus and hands the termin
   assert.match(f.statuses.get("magicmtn-workspace"), /Local pi.*disconnected from MagicMtn sandbox d215125b/);
   assert.deepEqual(f.menus, []);
 });
-test("relay creates the default workspace and attaches with a background copy of ctx.cwd", async (t) => {
+test("relay actions are rejected without provisioning or taking over the terminal", async (t) => {
   const f = await fixture(t);
-  const directory = mkdtempSync(join(tmpdir(), "magic-relay-git-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  assert.equal(spawnSync("git", ["init", "-q", directory]).status, 0);
-  f.ctx.cwd = directory;
-  await f.command.handler("relay", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "create", "--model", model.id],
-    ["pi", "attach", workspace.id, "--relay-from", directory]]);
-  assert.deepEqual(f.terminalEvents, ["stop", "start"]);
-});
-
-test("relay rejects a non-repository before provisioning", async (t) => {
-  const f = await fixture(t);
-  const directory = mkdtempSync(join(tmpdir(), "magic-relay-nongit-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  f.ctx.cwd = directory;
-  await f.command.handler("relay", f.ctx);
-  assert.match(f.notices.at(-1).message, /requires the current directory to be in a Git repository/);
+  for (const action of ["relay", "Relay current directory"]) {
+    await f.command.handler(action, f.ctx);
+    assert.equal(f.notices.at(-1).message, "Usage: /magic [default|view|new|inference]");
+  }
+  assert.deepEqual(f.calls(), []);
   assert.deepEqual(f.terminalEvents, []);
   assert.deepEqual(f.menus, []);
 });
@@ -389,7 +376,7 @@ test("authentication commands do not invoke the CLI or take over the terminal", 
   const f = await fixture(t);
   for (const action of ["login", "logout", "Sign in", "Sign out"]) {
     await f.command.handler(action, f.ctx);
-    assert.equal(f.notices.at(-1).message, "Usage: /magic [default|view|new|relay|inference]");
+    assert.equal(f.notices.at(-1).message, "Usage: /magic [default|view|new|inference]");
   }
   assert.deepEqual(f.calls(), []);
   assert.deepEqual(f.terminalEvents, []);

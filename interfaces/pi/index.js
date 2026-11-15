@@ -166,7 +166,7 @@ export default function magicmtn(pi) {
             const defaultLabel = defaultModel
               ? `Default (${defaultModel.display_name})`
               : "Default (configure model)";
-            const actions = [defaultLabel, "View sandboxes", "New workspace", "Relay current directory", "Inference only"];
+            const actions = [defaultLabel, "View sandboxes", "New workspace", "Inference only"];
             const selected = await select(ctx, `MagicMtn · ${account.user.display_name}`,
               actions.map((label) => ({ id: label })), (item) => item.id, false, states);
             if (selected === BACK || !selected) return;
@@ -202,14 +202,6 @@ export default function magicmtn(pi) {
             ctx.ui.notify("MagicMtn inference enabled with local tools. Model access renews automatically. Pricing is not yet reported in Pi.", "info");
             return;
           }
-          const relay = ["relay", "Relay current directory"].includes(action);
-          const directory = ctx.cwd || process.cwd();
-          if (relay) {
-            const git = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: directory, encoding: "utf8" });
-            if (git.status !== 0 || git.stdout.trim() !== "true") {
-              throw new Error("/magic relay requires the current directory to be in a Git repository.");
-            }
-          }
           let workspace;
           if (["open", "view", "View sandboxes"].includes(action)) {
             sandboxes: while (true) {
@@ -244,8 +236,8 @@ export default function magicmtn(pi) {
                 continue sandboxes;
               }
             }
-          } else if (!["new", "New workspace", "relay", "Relay current directory"].includes(action)) {
-            ctx.ui.notify("Usage: /magic [default|view|new|relay|inference]", "info");
+          } else if (!["new", "New workspace"].includes(action)) {
+            ctx.ui.notify("Usage: /magic [default|view|new|inference]", "info");
             return;
           }
           if (!workspace) {
@@ -261,7 +253,7 @@ export default function magicmtn(pi) {
             workspace = await magic(["pi", "create", ...inference]);
           }
           ctx.ui.notify(`Connecting workspace ${workspace.id}. Ctrl+] returns here; the sandbox stays running.`, "info");
-          const connected = await terminal(ctx, ["pi", "attach", workspace.id, ...(relay ? ["--relay-from", directory] : [])]);
+          const connected = await terminal(ctx, ["pi", "attach", workspace.id]);
           ctx.ui.setStatus("magicmtn-workspace", `Local pi · disconnected from MagicMtn sandbox ${workspace.id.slice(0, 8)}`);
           if (!connected) {
             const error = new Error(`Workspace connection ended with an error. Resume workspace ${workspace.id} through /magic.`);
@@ -271,10 +263,10 @@ export default function magicmtn(pi) {
           return;
         } catch (error) {
           const operation = error.attachFailure ? "attach"
-            : ["new", "New workspace", "relay", "Relay current directory"].includes(action) ? "create"
+            : ["new", "New workspace"].includes(action) ? "create"
             : ["open", "view", "View sandboxes"].includes(action) ? "resume"
             : action === "restart" ? "restart" : undefined;
-          const expected = /cancelled|must be published and enabled|No default inference model|requires the current directory/i.test(error.message);
+          const expected = /cancelled|must be published and enabled|No default inference model/i.test(error.message);
           if (operation && !error.reported && !expected) {
             await magic(["pi", "report-error", "--operation", operation]).catch(() => {});
           }
