@@ -984,3 +984,12 @@ fn sandbox_termination_requires_an_explicit_yes() {
         );
     }
 }
+
+#[cfg(test)]
+#[test]
+fn pi_attach_rejects_removed_relay_options() {
+    let id = "11111111-1111-4111-8111-111111111111";
+    assert!(Cli::try_parse_from(["magic", "pi", "attach", id]).is_ok());
+    assert!(Cli::try_parse_from(["magic", "pi", "attach", id, "--relay-from", "/repo"]).is_err());
+    assert!(Cli::try_parse_from(["magic", "pi", "relay", id, "/repo"]).is_err());
+}

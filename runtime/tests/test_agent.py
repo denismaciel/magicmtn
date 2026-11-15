@@ -80,47 +80,6 @@ class SupervisorTests(unittest.TestCase):
         self.assertEqual(self.frames[0]["output"], "")
         self.assertNotIn("secret path", json.dumps(self.frames[0]))
 
-    def test_completed_relay_resumes_in_destination_and_preserves_transcript(self):
-        destination = pathlib.Path(self.directory.name).resolve() / "copied project"
-        destination.mkdir()
-        workspace = str(uuid.uuid4())
-        self.supervisor.config["workspace_info"] = {"id": workspace}
-        status = pathlib.Path("/tmp") / f"magicmtn-relay-{workspace}.json"
-        self.addCleanup(lambda: status.unlink(missing_ok=True))
-        self.supervisor.harness.sessions.mkdir()
-        session = self.supervisor.harness.sessions / "session.jsonl"
-        transcript = '{"type":"message","message":{"role":"user","content":"keep me"}}\n'
-        session.write_text(json.dumps({"type": "session", "cwd": self.directory.name}) + "\n" + transcript)
-        # Model Pi's graceful exit after the completion marker appears.
-        self.run_supervisor("import pathlib,time,os; p=pathlib.Path('launched'); p.write_text(os.getcwd()); time.sleep(0.2)")
-        wait_for(lambda: (pathlib.Path(self.directory.name) / "launched").exists())
-        agent.atomic_json(status, {"state": "complete", "directory": str(destination)})
-        wait_for(lambda: (destination / "launched").exists())
-        self.assertEqual((destination / "launched").read_text(), str(destination))
-        # The real Pi command also updates its saved cwd before resuming.
-        command = self.supervisor.harness.command(str(destination))
-        self.assertFalse(session.exists())
-        session = next(self.supervisor.harness.sessions.glob("*.jsonl"))
-        self.assertEqual(command[1:3], ["--session", str(session)])
-        header, _, contents = session.read_text().partition("\n")
-        self.assertEqual(json.loads(header)["cwd"], str(destination))
-        self.assertEqual(contents, transcript)
-
-    def test_completed_relay_restarts_in_same_directory_exactly_once(self):
-        workspace = str(uuid.uuid4())
-        self.supervisor.config["workspace_info"] = {"id": workspace}
-        status = pathlib.Path("/tmp") / f"magicmtn-relay-{workspace}.json"
-        self.addCleanup(lambda: status.unlink(missing_ok=True))
-        agent.atomic_json(status, {"state": "copying", "directory": self.directory.name})
-        launches = pathlib.Path(self.directory.name) / "launches"
-        self.run_supervisor("import pathlib,time,os; p=pathlib.Path('launches'); p.open('a').write(os.environ['MAGICMTN_RELAY_READY']); time.sleep(0.3)")
-        wait_for(launches.exists)
-        self.assertEqual(launches.read_text(), "0")
-        agent.atomic_json(status, {"state": "complete", "directory": self.directory.name})
-        wait_for(lambda: launches.read_text() == "01")
-        wait_for(lambda: self.supervisor.state == "exited")
-        self.assertEqual(launches.read_text(), "01")
-
     def test_ambiguous_saved_session_reports_resume_failure(self):
         self.offline = False
         self.supervisor.harness.sessions.mkdir(exist_ok=True)
@@ -271,7 +230,7 @@ class SupervisorTests(unittest.TestCase):
             self.config["model"].update(api="openai-completions", provider="original-selected-provider", baseUrl="https://original-selected-upstream.invalid/v1")
         self.supervisor.configure()
         command = self.supervisor.harness.command
-        self.supervisor.harness.command = lambda cwd=None: [os.environ["MAGICMTN_TEST_PI"], *command(cwd)[1:], "--offline", "--no-context-files", "--no-extensions"]
+        self.supervisor.harness.command = lambda: [os.environ["MAGICMTN_TEST_PI"], *command()[1:], "--offline", "--no-context-files", "--no-extensions"]
         # Retain adapter command refresh on explicit restart.
         self.supervisor.command = ["pi"]
         self.supervisor.request = agent.Supervisor.request.__get__(self.supervisor)

@@ -1,20 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { writeFileSync, rmSync } from "node:fs";
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import { Container, CURSOR_MARKER, KeybindingsManager, ScrollView, Spacer, TUI_KEYBINDINGS, TuiMainScreen, VStack, renderFakeCursor, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import workspaceStatus from "../workspace.js";
 
 const hasDots = (line) => /[\u2801-\u28ff]/u.test(line);
 
-function fixture(t, { mode = "tui", sandbox = true, supervised = true, rows = 40, initialText = "", entries = [], headerRows = 8, nested = false, previousEditor } = {}) {
+function fixture(t, { mode = "tui", sandbox = true, rows = 40, initialText = "", entries = [], headerRows = 8, nested = false, previousEditor } = {}) {
   const previous = process.env.MAGICMTN_WORKSPACE_INFO;
-  const previousRelay = process.env.MAGICMTN_RELAY_READY;
-  if (supervised) process.env.MAGICMTN_RELAY_READY ??= "1";
-  else delete process.env.MAGICMTN_RELAY_READY;
   t.after(() => {
-    if (previousRelay === undefined) delete process.env.MAGICMTN_RELAY_READY;
-    else process.env.MAGICMTN_RELAY_READY = previousRelay;
     if (previous === undefined) delete process.env.MAGICMTN_WORKSPACE_INFO;
     else process.env.MAGICMTN_WORKSPACE_INFO = previous;
   });
@@ -45,11 +39,7 @@ function fixture(t, { mode = "tui", sandbox = true, supervised = true, rows = 40
   editor.setText(initialText);
   tui.setFocus({ handleInput(data) { input.push(data); editor.handleInput(data); } });
   let subscriptions = 0;
-  let idle = true;
-  let pending = false;
-  let shutdowns = 0;
-  const ctx = { mode, cwd: "/workspace", isIdle: () => idle, hasPendingMessages: () => pending,
-    shutdown() { shutdowns++; }, sessionManager: { getBranch: () => entries }, ui: {
+  const ctx = { mode, cwd: "/workspace", sessionManager: { getBranch: () => entries }, ui: {
     theme,
     getEditorComponent() { return editorFactory; },
     setEditorComponent(factory) {
@@ -88,7 +78,6 @@ function fixture(t, { mode = "tui", sandbox = true, supervised = true, rows = 40
   emit("session_start");
   t.after(() => emit("session_shutdown"));
   return { tui, renders: () => renders, widgets, statuses, input, emit, editor: () => editor, editorFactory: () => editorFactory, subscriptions: () => subscriptions,
-    shutdowns: () => shutdowns, setIdle(value) { idle = value; }, setPending(value) { pending = value; },
     send: (data) => tui.handleTerminalInput(data) };
 }
 
@@ -359,93 +348,3 @@ test("local Pi does not show a sandbox welcome", (t) => {
   assert.equal(f.subscriptions(), 0);
   assert.equal(f.statuses.size, 0);
 });
-
-
-test("relay notice appears during copying, survives interaction, and disappears on completion", (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
-  const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
-  t.after(() => rmSync(status, { force: true }));
-  const f = fixture(t);
-  assert.equal(f.widgets.has("magicmtn-relay"), false);
-  writeFileSync(status, JSON.stringify({ state: "copying" }));
-  t.mock.timers.tick(1000);
-  assert.match(f.widgets.get("magicmtn-relay").render(80).join(""), /Copying your repo\.\.\./);
-  f.send("x");
-  assert.equal(f.widgets.has("magicmtn-relay"), true);
-  rmSync(status);
-  t.mock.timers.tick(1000);
-  assert.equal(f.widgets.has("magicmtn-relay"), false);
-});
-
-test("relay failure is visible on resumed sessions and polling stops on shutdown", (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
-  const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
-  t.after(() => rmSync(status, { force: true }));
-  writeFileSync(status, JSON.stringify({ state: "failed" }));
-  const f = fixture(t, { entries: [{ type: "message", message: { role: "user" } }] });
-  assert.match(f.widgets.get("magicmtn-relay").render(100).join(""), /file copy failed/);
-  f.emit("session_shutdown");
-  t.mock.timers.tick(2000);
-  assert.equal(f.widgets.has("magicmtn-relay"), false);
-});
-
-test("relay switches directory once after completion and waits for idle without queued messages", (t) => {
-  t.mock.timers.enable({ apis: ["setInterval"] });
-  const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
-  t.after(() => rmSync(status, { force: true }));
-  writeFileSync(status, JSON.stringify({ state: "copying", directory: "/copied project" }));
-  const f = fixture(t);
-  f.setIdle(false);
-  writeFileSync(status, JSON.stringify({ state: "complete", directory: "/copied project" }));
-  t.mock.timers.tick(1000);
-  assert.equal(f.shutdowns(), 0);
-  assert.equal(f.widgets.has("magicmtn-relay"), false);
-  f.setIdle(true);
-  f.setPending(true);
-  t.mock.timers.tick(1000);
-  assert.equal(f.shutdowns(), 0);
-  f.setPending(false);
-  t.mock.timers.tick(3000);
-  assert.equal(f.shutdowns(), 1);
-});
-
-test("completed relay in the current directory does not restart Pi", (t) => {
-  const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
-  t.after(() => rmSync(status, { force: true }));
-  writeFileSync(status, JSON.stringify({ state: "complete", directory: "/workspace" }));
-  const f = fixture(t);
-  assert.equal(f.shutdowns(), 0);
-  assert.equal(f.widgets.has("magicmtn-relay"), false);
-});
-
-test("shell-launched Pi stays open when another session's relay completes", (t) => {
-  const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
-  t.after(() => rmSync(status, { force: true }));
-  writeFileSync(status, JSON.stringify({ state: "complete", directory: "/workspace/copied-repo" }));
-  const f = fixture(t, { supervised: false });
-  f.emit("session_start");
-  assert.equal(f.shutdowns(), 0);
-});
-
-for (const completesBeforeStartup of [false, true]) {
-  test(`relay reloads the current directory once when completion is ${completesBeforeStartup ? "before" : "after"} extension startup`, (t) => {
-    t.mock.timers.enable({ apis: ["setInterval"] });
-    const previous = process.env.MAGICMTN_RELAY_READY;
-    process.env.MAGICMTN_RELAY_READY = "0";
-    t.after(() => {
-      if (previous === undefined) delete process.env.MAGICMTN_RELAY_READY;
-      else process.env.MAGICMTN_RELAY_READY = previous;
-    });
-    const status = "/tmp/magicmtn-relay-d215125b-4896-4ca4-a36f-aefdeea095fb.json";
-    t.after(() => rmSync(status, { force: true }));
-    writeFileSync(status, JSON.stringify({ state: completesBeforeStartup ? "complete" : "copying", directory: "/workspace" }));
-    const f = fixture(t);
-    writeFileSync(status, JSON.stringify({ state: "complete", directory: "/workspace" }));
-    t.mock.timers.tick(3000);
-    assert.equal(f.shutdowns(), 1);
-    process.env.MAGICMTN_RELAY_READY = "1";
-    f.emit("session_start");
-    t.mock.timers.tick(3000);
-    assert.equal(f.shutdowns(), 1);
-  });
-}

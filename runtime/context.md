@@ -8,9 +8,8 @@ Help the user do their work using this environment.
 
 - Commands and file edits operate inside this sandbox. Use your current working
   directory and the project's instructions as the source of truth for the task.
-- `/workspace` is the initial workspace. MagicMtn relay copies a local Git
-  repository into the sandbox and resumes Pi in the copied project's directory.
-  Treat that directory as a remote copy; local files change through an explicit
+- `/workspace` is the initial workspace. Clone repositories or transfer files
+  into the sandbox to work on a project. Local files change through an explicit
   transfer or repository workflow.
 - The user connects through `magic pi attach` or `/magic` in their local Pi.
   Ctrl+] disconnects their terminal while the sandbox and managed agent continue

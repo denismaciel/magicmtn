@@ -71,10 +71,9 @@ class Supervisor:
         # through the authenticated relay as a Pi startup error.
         return ["pi"]
 
-    def environment(self, relay_directory=None):
+    def environment(self):
         environment = sandbox_environment.apply(self.runtime_environment)
         environment.update(TERM="xterm-256color", COLORTERM="truecolor")
-        environment["MAGICMTN_RELAY_READY"] = "1" if relay_directory else "0"
         return environment
 
     def start_child(self):
@@ -82,12 +81,8 @@ class Supervisor:
             if self.child is not None and self.child.poll() is None:
                 return
             command = self.command
-            destination = self.relay_directory()
-            self.child_relay_directory = destination
-            if destination:
-                self.config["workspace"] = destination
             if self.command[0] == "pi":
-                command = self.harness.command(destination)
+                command = self.harness.command()
             master, slave = pty.openpty()
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", self.size[1], self.size[0], 0, 0))
             # Avoid Python preexec_fn after threads have started. The tiny
@@ -95,24 +90,13 @@ class Supervisor:
             wrapper = [sys.executable, "-c", "import fcntl,os,sys,termios;fcntl.ioctl(0,termios.TIOCSCTTY,0);os.execvp(sys.argv[1],sys.argv[1:])"]
             self.child = subprocess.Popen(wrapper + command, stdin=slave, stdout=slave, stderr=slave,
                                           cwd=self.config.get("workspace", "/workspace"),
-                                          env=self.environment(destination), start_new_session=True, close_fds=True)
+                                          env=self.environment(), start_new_session=True, close_fds=True)
             os.close(slave)
             os.set_blocking(master, False)
             self.master = master
             self.exit_code = None
             self.state = "running"
         threading.Thread(target=self.read_output, args=(master, self.child), daemon=True).start()
-
-    def relay_directory(self):
-        try:
-            workspace = self.config.get("workspace_info", {}).get("id", self.id)
-            status = json.loads((pathlib.Path("/tmp") / f"magicmtn-relay-{workspace}.json").read_text())
-            directory = status.get("directory")
-            if status.get("state") == "complete" and directory and pathlib.Path(directory).is_absolute() and pathlib.Path(directory).is_dir():
-                return directory
-        except (OSError, ValueError):
-            pass
-        return None
 
     def read_output(self, master, child):
         try:
@@ -139,29 +123,13 @@ class Supervisor:
                 self.output_ready.set()
         finally:
             code = child.wait()
-            destination = self.relay_directory()
-            restart = False
             with self.lock:
                 if self.child is child:
-                    restart = (code == 0 and destination
-                               and destination != self.child_relay_directory
-                               and self.desired == "running" and not self.closed.is_set())
                     self.exit_code = code
                     self.state = "stopped" if self.desired == "stopped" else "exited"
-                    if restart:
-                        self.exit_code = None
-                        self.state = "starting"
                     self.master = None
             self.output_ready.set()
             os.close(master)
-            if restart:
-                try:
-                    self.start_child()
-                except (OSError, ValueError, RuntimeError):
-                    with self.lock:
-                        self.exit_code = START_FAILURE_EXIT_CODE
-                        self.state = "exited"
-                    self.output_ready.set()
 
     def request(self, path, body=None):
         payload = json.dumps(body or {}).encode()

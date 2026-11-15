@@ -1,6 +1,4 @@
 // Loaded inside the sandbox. Only public workspace metadata is passed here.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Text, renderFakeCursor, stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
@@ -85,42 +83,6 @@ export default function workspaceStatus(pi) {
   if (!raw) return;
   const workspace = JSON.parse(raw);
   let cleanupWelcome;
-  let relayTimer;
-  let cleanupRelay;
-  const watchRelay = (ctx) => {
-    cleanupRelay?.();
-    const statusPath = join("/tmp", `magicmtn-relay-${workspace.id}.json`);
-    let previous;
-    let switching = false;
-    const supervised = process.env.MAGICMTN_RELAY_READY !== undefined;
-    let awaitingRelay = process.env.MAGICMTN_RELAY_READY === "0";
-    const refresh = () => {
-      let status;
-      try { status = JSON.parse(readFileSync(statusPath, "utf8")); } catch { /* No active relay. */ }
-      const state = status?.state;
-      if (state === "copying") awaitingRelay = true;
-      // Pi binds its tools and project context at startup. The supervisor
-      // resumes this session in the destination after a graceful shutdown.
-      if (supervised && state === "complete" && status.directory && (awaitingRelay || status.directory !== ctx.cwd)
-        && !switching && ctx.isIdle() && !ctx.hasPendingMessages()) {
-        switching = true;
-        ctx.shutdown();
-      }
-      if (state === previous) return;
-      previous = state;
-      const message = state === "copying" ? "Copying your repo..."
-        : state === "failed" ? "Local file copy failed. Check the transfer log on your local machine." : undefined;
-      ctx.ui.setWidget("magicmtn-relay", message
-        ? (_tui, theme) => new Text(theme.fg("dim", message), 0, 0) : undefined);
-    };
-    refresh();
-    relayTimer = setInterval(refresh, 1000);
-    relayTimer.unref?.();
-    cleanupRelay = () => {
-      clearInterval(relayTimer);
-      ctx.ui.setWidget("magicmtn-relay", undefined);
-    };
-  };
   let dismissWelcome;
   const update = (_event, ctx) => {
     const model = ctx.model;
@@ -133,7 +95,6 @@ export default function workspaceStatus(pi) {
     update(event, ctx);
     cleanupWelcome?.();
     if (ctx.mode !== "tui") return;
-    watchRelay(ctx);
     if (ctx.sessionManager.getBranch().some((entry) => entry.type === "message"
       && ["user", "assistant"].includes(entry.message.role))) return;
 
@@ -221,6 +182,6 @@ export default function workspaceStatus(pi) {
     };
   });
   pi.on("agent_start", () => dismissWelcome?.());
-  pi.on("session_shutdown", () => { cleanupWelcome?.(); cleanupRelay?.(); });
+  pi.on("session_shutdown", () => { cleanupWelcome?.(); });
   pi.on("model_select", update);
 }
