@@ -99,7 +99,8 @@ async fn update(base: &str, executable: &Path, platform: &str) -> Result<String>
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(staged.path(), fs::Permissions::from_mode(0o755))?;
     }
-    let status = Command::new(staged.path())
+    let staged = staged.into_temp_path();
+    let status = Command::new(&staged)
         .arg("--version")
         .output()
         .context("the downloaded magic could not run")?;
