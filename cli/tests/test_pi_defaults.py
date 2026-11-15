@@ -18,6 +18,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         response = ({"id": "00000000-0000-4000-8000-000000000009"}
                     if self.path == "/v1/pi/inference-connections" else self.server.created)
+        if self.path in ("/v1/sandboxes", "/v1/sandboxes/managed"):
+            response = {"id": self.server.created["idempotency_key"], "provider_id": "test-provider"}
         self.wfile.write(json.dumps(response).encode())
 
     def log_message(self, *args):
@@ -62,6 +64,15 @@ class DefaultsTest(unittest.TestCase):
                                         env=dict(os.environ, HOME=home), capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(server.created["model_id"], other_model)
+                sandbox_id = server.created["idempotency_key"]
+                self.assertEqual(result.stdout, sandbox_id + "\n")
+                self.assertEqual(result.stderr, f"Sandbox {sandbox_id} created successfully\n")
+                result = subprocess.run([binary, "--server-url", base, "sandbox", "new", "--image", "alpine"],
+                                        env=dict(os.environ, HOME=home), capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                sandbox_id = server.created["idempotency_key"]
+                self.assertEqual(result.stdout, sandbox_id + "\n")
+                self.assertEqual(result.stderr, f"Sandbox {sandbox_id} created successfully\n")
                 self.assertEqual(call("catalog")["defaults"], {"model_id": other_model, "inference_source": "magicmtn"})
                 self.assertEqual(next(directory.glob("defaults-*.json")).stat().st_mode & 0o777, 0o600)
                 call("defaults", "--model", replacement, success=False)

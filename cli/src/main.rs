@@ -755,9 +755,7 @@ async fn run(cli: Cli) -> Result<()> {
                 !local || image.is_some(),
                 "select a local sandbox image with --image (for example, ubuntu:24.04)"
             );
-            let explicit_image = image.is_some();
             let key = uuid::Uuid::new_v4();
-            eprintln!("Creating sandbox {key}.");
             let (route, body) = match image {
                 Some(image) => (
                     "v1/sandboxes",
@@ -775,17 +773,9 @@ async fn run(cli: Cli) -> Result<()> {
                 ),
             };
             let result = api.request(Method::POST, route, Some(body)).await?;
-            if !explicit_image {
-                println!("{result}");
-            } else if std::io::stdout().is_terminal() {
-                println!(
-                    "Created sandbox {} ({})",
-                    text(&result, "id"),
-                    text(&result, "provider_id")
-                );
-            } else {
-                println!("{}", text(&result, "id"));
-            }
+            let id = text(&result, "id");
+            eprintln!("Sandbox {id} created successfully");
+            println!("{id}");
         }
         SandboxCommands::Exec {
             id,
