@@ -24,7 +24,7 @@ for line in sys.stdin:
     with open({events},'a') as output:
         output.write(operation+'\n')
     if operation=='describe':
-        result={{'kind':'description','value':{{'manifest_version':1,'provider_version':'0.1.0','capabilities':{{'inference_tasks':[],'sandbox_operations':['create','status','exec_bounded','terminate'],'editable_surfaces':[],'observe':False,'evaluate':False,'deploy':False}}}}}}
+        result={{'kind':'description','value':{{'manifest_version':1,'provider_version':'0.1.0','capabilities':{{'inference_tasks':[],'sandbox_operations':['create','status','ssh','exec_bounded','terminate'],'editable_surfaces':[],'observe':False,'evaluate':False,'deploy':False}}}}}}
     elif operation=='sandbox_create':
         result={{'kind':'sandbox','value':{{'provider_id':'test-container','status':'running','create_time_ms':1,'metadata':{{}}}}}}
     elif operation=='sandbox_status':
@@ -46,7 +46,7 @@ for line in sys.stdin:
             "os":std::env::consts::OS,"arch":std::env::consts::ARCH,
             "sha256":hex::encode(ring::digest::digest(&ring::digest::SHA256,code.as_bytes()).as_ref())},
         "manifest":{"manifest_version":1,"provider_version":"0.1.0", "capabilities":{
-            "inference_tasks":[],"sandbox_operations":["create","status","exec_bounded","terminate"],
+            "inference_tasks":[],"sandbox_operations":["create","status","ssh","exec_bounded","terminate"],
             "editable_surfaces":[],"observe":false,"evaluate":false,"deploy":false}},
         "active":true,"executable":script,
     }))?;
@@ -119,6 +119,17 @@ async fn exercise_sandbox(mut store: Store, path: Option<&std::path::Path>) -> a
     let (status, saved) = request(&app, "POST", "/v1/sandboxes", create.clone()).await?;
     assert_eq!(status, StatusCode::OK, "{saved}");
     assert_eq!(saved["status"], "running");
+    let (status, shell) = request(
+        &app,
+        "POST",
+        &format!("/v1/sandboxes/{id}/shell"),
+        json!(null),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{shell}");
+    assert_eq!(shell["pin"], saved["metadata"]["_magicmtn_provider"]);
+    assert_eq!(shell["sandbox"]["provider_id"], "test-container");
+    assert_eq!(shell["configuration"], json!({}));
     assert_eq!(
         request(&app, "POST", "/v1/sandboxes", create).await?.0,
         StatusCode::OK
@@ -172,6 +183,17 @@ async fn exercise_sandbox(mut store: Store, path: Option<&std::path::Path>) -> a
     .await?;
     assert_eq!(status, StatusCode::OK, "{ended}");
     assert_eq!(ended["status"], "ended", "{ended}");
+    assert_eq!(
+        request(
+            &app,
+            "POST",
+            &format!("/v1/sandboxes/{id}/shell"),
+            json!(null)
+        )
+        .await?
+        .0,
+        StatusCode::CONFLICT
+    );
     assert_eq!(
         request(
             &app,
@@ -467,6 +489,17 @@ async fn sqlite_expiration_rejects_execution_and_schedules_cleanup() -> anyhow::
         .0,
         StatusCode::CONFLICT
     );
+    assert_eq!(
+        request(
+            &app,
+            "POST",
+            &format!("/v1/sandboxes/{id}/shell"),
+            json!(null)
+        )
+        .await?
+        .0,
+        StatusCode::CONFLICT
+    );
     store.schedule().await?;
     magicmtn_engine::sandbox_lifecycle::run_one_store(&store, &registry, Some(id)).await?;
     let saved = store.get(id).await?.unwrap();
@@ -502,5 +535,72 @@ async fn sqlite_refuses_unrelated_databases() -> anyhow::Result<()> {
         0
     );
     pool.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn local_shell_requires_authentication_and_an_enabled_connection() -> anyhow::Result<()> {
+    let directory = tempfile::tempdir()?;
+    let db = Database::open(&directory.path().join("state.sqlite3")).await?;
+    let registry = provider(directory.path())?;
+    db.bootstrap(&registry).await?;
+    let app = router(
+        Store::Sqlite(db.clone()),
+        registry.clone(),
+        TOKEN.into(),
+        3600,
+    );
+    let id = Uuid::new_v4();
+    let (_, saved) = request(
+        &app,
+        "POST",
+        "/v1/sandboxes",
+        json!({"provider":"test-local","template":"image:alpine","idempotency_key":id}),
+    )
+    .await?;
+    let path = format!("/v1/sandboxes/{id}/shell");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&path)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    sqlx::query("UPDATE provider_connections SET status='disabled'")
+        .execute(&db.pool)
+        .await?;
+    assert_eq!(
+        request(&app, "POST", &path, json!(null)).await?.0,
+        StatusCode::CONFLICT
+    );
+    // Restart configuration updates future sandboxes without rewriting existing snapshots.
+    sqlx::query(
+        "UPDATE provider_connections SET binding=json_set(binding,'$.configuration',json(?))",
+    )
+    .bind(r#"{"MAGICMTN_APPLE_CONTAINER_NETWORK":"none"}"#)
+    .execute(&db.pool)
+    .await?;
+    db.bootstrap(&registry).await?;
+    let binding: Value = sqlx::query_scalar("SELECT binding FROM provider_connections")
+        .fetch_one(&db.pool)
+        .await?;
+    assert_eq!(binding["configuration"], json!({}));
+    assert_eq!(binding["generation"], 2);
+    assert_eq!(
+        binding["connection_id"],
+        saved["metadata"]["_magicmtn_connection"]["connection_id"]
+    );
+    assert_eq!(db.get(id).await?.unwrap()["metadata"], saved["metadata"]);
+    db.bootstrap(&registry).await?;
+    let generation: i64 =
+        sqlx::query_scalar("SELECT json_extract(binding,'$.generation') FROM provider_connections")
+            .fetch_one(&db.pool)
+            .await?;
+    assert_eq!(generation, 2);
+    registry.shutdown().await;
+    db.pool.close().await;
     Ok(())
 }

@@ -19,6 +19,8 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
+mod shell;
+
 pub static MIGRATOR: LazyLock<sqlx::migrate::Migrator> = LazyLock::new(|| {
     magicmtn_engine::schema::compose(sqlx::migrate!("./migrations").iter().cloned())
 });
@@ -183,13 +185,13 @@ pub fn router(
     token: String,
     ttl_seconds: u32,
 ) -> Router {
+    let store = store.into();
+    let shell = shell::router(store.clone(), registry.clone());
     magicmtn_engine::sandboxes::router(
-        ServiceState {
-            store: store.into(),
-            registry,
-        },
+        ServiceState { store, registry },
         Arc::new(LocalPolicy { ttl_seconds }),
     )
+    .merge(shell)
     .route(
         "/health",
         get(|| async { Json(json!({"status":"ok", "mode":"local"})) }),

@@ -73,7 +73,9 @@ impl Database {
                 credential_ref: Some(format!("local:{name}")),
                 runner_id: None,
             };
-            sqlx::query("INSERT INTO provider_connections(id,reference,provider,binding) VALUES(?,?,?,?) ON CONFLICT(reference) DO NOTHING").bind(binding.connection_id.to_string()).bind(&binding.connection_ref).bind(name).bind(json!(binding)).execute(&self.pool).await?;
+            // Apply startup settings and provider upgrades to future sandboxes.
+            // Existing resources retain their original binding and release pin.
+            sqlx::query("INSERT INTO provider_connections(id,reference,provider,binding) VALUES(?,?,?,?) ON CONFLICT(reference) DO UPDATE SET binding=json_set(excluded.binding,'$.connection_id',json_extract(provider_connections.binding,'$.connection_id'),'$.generation',json_extract(provider_connections.binding,'$.generation')+1) WHERE json_extract(provider_connections.binding,'$.configuration')<>json_extract(excluded.binding,'$.configuration') OR json_extract(provider_connections.binding,'$.pin')<>json_extract(excluded.binding,'$.pin')").bind(binding.connection_id.to_string()).bind(&binding.connection_ref).bind(name).bind(json!(binding)).execute(&self.pool).await?;
         }
         // Retain and validate frozen releases, including resources awaiting cleanup.
         let mut bindings: Vec<Value> =

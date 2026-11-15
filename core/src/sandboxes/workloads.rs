@@ -1,7 +1,6 @@
 //! Bounded workload execution in managed sandboxes.
 use super::*;
 use crate::provider_connections::{self as connections, Binding};
-use magicmtn_sdk::ProviderSandbox;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -42,32 +41,10 @@ pub(super) async fn execute(
 ) -> Reply {
     body.validate()?;
     let saved = resolve_store(&s.store, &id).await?;
-    if !matches!(
-        saved["status"].as_str(),
-        Some("running" | "starting" | "RUNNING" | "ready" | "PENDING" | "STARTING" | "pending")
-    ) || saved["provider_id"]
-        .as_str()
-        .is_none_or(|id| id.starts_with("pending:"))
-    {
-        return Err((
-            StatusCode::CONFLICT,
-            "sandbox is not available for execution".into(),
-        ));
-    }
-    if let Some(expires) = saved["expires_at"].as_str() {
-        if chrono::DateTime::parse_from_rfc3339(expires).map_err(failed)? <= chrono::Utc::now() {
-            return Err((StatusCode::CONFLICT, "sandbox has expired".into()));
-        }
-    }
+    let sandbox = super::execution_sandbox(&saved)?;
     let binding: Binding =
         serde_json::from_value(saved["metadata"]["_magicmtn_connection"].clone())
             .map_err(failed)?;
-    let sandbox = ProviderSandbox {
-        provider_id: saved["provider_id"].as_str().unwrap().into(),
-        status: saved["status"].as_str().map(str::to_owned),
-        create_time_ms: saved["create_time_ms"].as_i64(),
-        metadata: Some(saved["metadata"].clone()),
-    };
     let result = connections::dispatch_store(
         &s.store,
         &s.registry,

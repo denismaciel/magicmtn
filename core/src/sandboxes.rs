@@ -370,6 +370,33 @@ impl crate::workspace::WorkspaceState for SandboxState {
     }
 }
 
+/// Validate availability consistently for bounded commands and local terminals.
+pub fn execution_sandbox(saved: &Value) -> Result<magicmtn_sdk::ProviderSandbox, ApiError> {
+    if !matches!(
+        saved["status"].as_str(),
+        Some("running" | "starting" | "RUNNING" | "ready" | "PENDING" | "STARTING" | "pending")
+    ) || saved["provider_id"]
+        .as_str()
+        .is_none_or(|id| id.starts_with("pending:"))
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            "sandbox is not available for execution".into(),
+        ));
+    }
+    if let Some(expires) = saved["expires_at"].as_str() {
+        if chrono::DateTime::parse_from_rfc3339(expires).map_err(failed)? <= chrono::Utc::now() {
+            return Err((StatusCode::CONFLICT, "sandbox has expired".into()));
+        }
+    }
+    Ok(magicmtn_sdk::ProviderSandbox {
+        provider_id: saved["provider_id"].as_str().unwrap().into(),
+        status: saved["status"].as_str().map(str::to_owned),
+        create_time_ms: saved["create_time_ms"].as_i64(),
+        metadata: Some(saved["metadata"].clone()),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -18,6 +18,7 @@ mod mode;
 mod pi;
 mod provider_registry;
 mod sandbox_scp;
+mod sandbox_shell;
 mod telemetry;
 mod uninstall;
 mod update;
@@ -212,7 +213,7 @@ enum SandboxCommands {
         #[arg(required = true, trailing_var_arg = true)]
         command: Vec<String>,
     },
-    /// Open an interactive shell; Ctrl+] disconnects without stopping the sandbox
+    /// Open an interactive shell; exit returns to your terminal
     Ssh { id: String },
     /// Copy a local file into the sandbox's default working directory
     Scp { id: String, file: PathBuf },
@@ -794,7 +795,11 @@ async fn run(cli: Cli) -> Result<()> {
         }
         SandboxCommands::Ssh { id } => {
             validate_id(&id)?;
-            pi::sandbox_shell(&api, &id).await?;
+            if local {
+                sandbox_shell::run(&api, &id).await?;
+            } else {
+                pi::sandbox_shell(&api, &id).await?;
+            }
         }
         SandboxCommands::Scp { id, file } => sandbox_scp::run(&api, &id, &file).await?,
         SandboxCommands::List { all } => {
