@@ -217,6 +217,10 @@ pub fn router(
 }
 
 pub async fn run(options: Options) -> Result<()> {
+    run_with_ready(options, || Ok(())).await
+}
+
+pub async fn run_with_ready(options: Options, ready: impl FnOnce() -> Result<()>) -> Result<()> {
     let _ = tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .try_init();
@@ -295,6 +299,7 @@ pub async fn run(options: Options) -> Result<()> {
             authenticate,
         )),
     );
+    ready()?;
     let worker = tokio::spawn(magicmtn_engine::sandbox_lifecycle::run_store(
         store.clone(),
         registry.clone(),

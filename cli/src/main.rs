@@ -41,30 +41,63 @@ struct Cli {
 }
 
 impl Cli {
-    fn server_url(&self) -> Result<String> {
+    fn target(&self) -> Result<mode::Selection> {
+        let cloud = matches!(
+            self.command,
+            Some(Commands::Login { .. } | Commands::Logout)
+        );
+        anyhow::ensure!(
+            !cloud || !self.local,
+            "Cloud login and logout use the Cloud server; omit --local"
+        );
         if self.local {
-            return Ok(magicmtn_local::connection(&magicmtn_local::directory()?)?.url);
+            let directory = if std::env::var_os("MAGICMTN_LOCAL_DIRECTORY").is_some()
+                || std::env::var_os("MAGICMTN_CONFIG_DIRECTORY").is_some()
+            {
+                magicmtn_local::directory()?
+            } else if let Some(mode::Selection::Local { directory }) = mode::selected()? {
+                directory
+            } else {
+                magicmtn_local::directory()?
+            };
+            return Ok(mode::Selection::Local { directory });
         }
-        Ok(self
-            .server_url
-            .clone()
-            .or_else(|| std::env::var("MAGICMTN_SERVER_URL").ok())
-            .unwrap_or_else(|| {
-                if cfg!(feature = "development-server") {
-                    "http://127.0.0.1:47821"
-                } else {
-                    "https://api.magicmtn.ai"
-                }
-                .into()
-            }))
+        if let Some(server) = &self.server_url {
+            return Ok(mode::Selection::Cloud {
+                server: server.clone(),
+            });
+        }
+        if cloud {
+            if cfg!(feature = "development-server") && mode::selected()?.is_none() {
+                return Ok(mode::Selection::Cloud {
+                    server: mode::default_server().to_owned(),
+                });
+            }
+            return Ok(mode::Selection::Cloud {
+                server: mode::cloud_server()?,
+            });
+        }
+        if let Some(selection) = mode::selected()? {
+            return Ok(selection);
+        }
+        Ok(mode::Selection::Cloud {
+            server: std::env::var("MAGICMTN_SERVER_URL")
+                .unwrap_or_else(|_| mode::default_server().to_owned()),
+        })
+    }
+
+    fn server_url(&self) -> Result<String> {
+        match self.target()? {
+            mode::Selection::Cloud { server } => Ok(server),
+            mode::Selection::Local { directory } => Ok(magicmtn_local::connection(&directory)?.url),
+        }
     }
 }
 
 #[cfg(all(test, not(feature = "development-server")))]
 #[test]
 fn cloud_is_default_and_server_selection_is_explicit() {
-    let cli = Cli::try_parse_from(["magic"]).unwrap();
-    assert_eq!(cli.server_url().unwrap(), "https://api.magicmtn.ai");
+    assert_eq!(mode::default_server(), "https://api.magicmtn.ai");
     let cli = Cli::try_parse_from(["magic", "--server-url", "http://127.0.0.1:47821"]).unwrap();
     assert_eq!(cli.server_url().unwrap(), "http://127.0.0.1:47821");
     assert!(
@@ -482,6 +515,7 @@ struct Api {
     client: reqwest::Client,
     base: reqwest::Url,
     token: Option<String>,
+    local: bool,
 }
 fn http_client() -> Result<reqwest::Client> {
     let mut builder = reqwest::Client::builder()
@@ -518,6 +552,7 @@ impl Api {
             client: http_client()?,
             base,
             token: None,
+            local: false,
         })
     }
     fn authenticated(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
@@ -599,7 +634,7 @@ async fn main() -> Result<()> {
         Some(Commands::Pi { command }) => Some(command.operation()),
         _ => None,
     };
-    let server_url = cli.server_url()?;
+    let server_url = cli.server_url().unwrap_or_default();
     let operation = operation.filter(|_| {
         server_url == "https://api.magicmtn.ai" && configuration::error_reporting().unwrap_or(false)
     });
@@ -612,10 +647,8 @@ async fn main() -> Result<()> {
     result
 }
 
-async fn run(cli: Cli) -> Result<()> {
-    let server_url = cli.server_url()?;
-    let local = cli.local;
-    let Some(command) = cli.command else {
+async fn run(mut cli: Cli) -> Result<()> {
+    let Some(command) = cli.command.take() else {
         Cli::command().print_help()?;
         return Ok(());
     };
@@ -628,18 +661,23 @@ async fn run(cli: Cli) -> Result<()> {
             } => {
                 let transition = mode::transition()?;
                 authentication::Credentials::new()?
-                    .ensure_signed_out()
-                    .await?;
+                    .ensure_signed_out(&reqwest::Url::parse(&mode::cloud_server()?)?)?;
                 let directory = std::path::absolute(magicmtn_local::directory()?)?;
-                let _running = mode::server(&directory)?;
+                let mut running = mode::server()?;
                 drop(transition);
-                magicmtn_local::run(magicmtn_local::Options {
-                    bind,
-                    ttl_seconds,
-                    network,
-                    directory,
-                    provider_directory: configuration::directory()?.join("providers"),
-                })
+                magicmtn_local::run_with_ready(
+                    magicmtn_local::Options {
+                        bind,
+                        ttl_seconds,
+                        network,
+                        directory: directory.clone(),
+                        provider_directory: configuration::directory()?.join("providers"),
+                    },
+                    || {
+                        mode::ready(&mut running, &directory)?;
+                        mode::select(&mode::Selection::Local { directory })
+                    },
+                )
                 .await
             }
             ServerCommands::Stop => {
@@ -680,7 +718,7 @@ async fn run(cli: Cli) -> Result<()> {
         };
     }
     if let Commands::Uninstall = command {
-        return uninstall::run(&server_url).await;
+        return uninstall::run(&cli.server_url()?).await;
     }
     if let Commands::Completion {
         shell,
@@ -710,9 +748,20 @@ async fn run(cli: Cli) -> Result<()> {
             ProviderCommands::List { format } => provider_registry::list(*format),
         };
     }
+    cli.command = Some(command);
+    let target = cli.target()?;
+    let command = cli.command.take().unwrap();
+    let (server_url, local_directory) = match target {
+        mode::Selection::Cloud { server } => (server, None),
+        mode::Selection::Local { directory } => {
+            (magicmtn_local::connection(&directory)?.url, Some(directory))
+        }
+    };
+    let local = local_directory.is_some();
     let mut api = Api::new(&server_url)?;
-    if local {
-        let info = magicmtn_local::connection(&magicmtn_local::directory()?)?;
+    api.local = local;
+    if let Some(directory) = local_directory {
+        let info = magicmtn_local::connection(&directory)?;
         let url = reqwest::Url::parse(&info.url)?;
         anyhow::ensure!(
             url.scheme() == "http"
@@ -731,13 +780,21 @@ async fn run(cli: Cli) -> Result<()> {
         Commands::Login { client } => return authentication::login(&api, &client).await,
         Commands::Logout => return authentication::logout(&api).await,
         Commands::Whoami { command: None } => {
-            println!("{}", authentication::whoami(&api).await?);
+            if local {
+                println!("Mode: Local\nServer: {}", api.base);
+            } else {
+                println!("{}", authentication::whoami(&api).await?);
+            }
             return Ok(());
         }
         Commands::Whoami {
             command: Some(WhoamiCommands::Plan),
         } => {
-            let access = authentication::plan_access(&api).await?;
+            let access = if local {
+                json!({"mode":"local", "plan":"local", "access_active":true})
+            } else {
+                authentication::plan_access(&api).await?
+            };
             println!("{}", serde_json::to_string_pretty(&access)?);
             return Ok(());
         }

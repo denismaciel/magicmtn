@@ -26,6 +26,15 @@ impl Drop for Server {
 fn running_server_blocks_login_and_stop_releases_locks() {
     let home = tempfile::tempdir().unwrap();
     let directory = home.path().join(".config/magicmtn/local");
+    let credentials = home.path().join(".config/magicmtn/cli");
+    fs::create_dir_all(&credentials).unwrap();
+    use sha2::{Digest, Sha256};
+    let developer = "http://127.0.0.1:0/";
+    fs::write(
+        credentials.join(format!("{:x}.json", Sha256::digest(developer.as_bytes()))),
+        serde_json::json!({"server":developer,"token":"developer-session"}).to_string(),
+    )
+    .unwrap();
     let mut server = Server(
         magic(home.path())
             .args(["server", "start", "--bind", "127.0.0.1:0"])
@@ -44,6 +53,32 @@ fn running_server_blocks_login_and_stop_releases_locks() {
         std::thread::sleep(Duration::from_millis(25));
     }
     assert!(magicmtn_local::is_running(&directory).unwrap());
+    let account = magic(home.path()).args(["pi", "account"]).output().unwrap();
+    assert!(
+        account.status.success(),
+        "{}",
+        String::from_utf8_lossy(&account.stderr)
+    );
+    let account: serde_json::Value = serde_json::from_slice(&account.stdout).unwrap();
+    assert_eq!(account["mode"], "local");
+    assert_eq!(account["signed_in"], false);
+    let list = magic(home.path())
+        .args(["sandbox", "list"])
+        .output()
+        .unwrap();
+    assert!(
+        list.status.success(),
+        "{}",
+        String::from_utf8_lossy(&list.stderr)
+    );
+    let development = magic(home.path())
+        .args(["--server-url", "http://127.0.0.1:0", "login"])
+        .output()
+        .unwrap();
+    let error = String::from_utf8_lossy(&development.stderr);
+    assert!(error.contains("authentication service"), "{error}");
+    assert!(!error.contains("magic server stop"), "{error}");
+
     let login = magic(home.path()).arg("login").output().unwrap();
     assert!(!login.status.success());
     assert!(String::from_utf8_lossy(&login.stderr).contains("magic server stop"));
@@ -67,6 +102,13 @@ fn running_server_blocks_login_and_stop_releases_locks() {
     server.0.wait().unwrap();
     assert!(!magicmtn_local::is_running(&directory).unwrap());
     assert!(directory.join("connection.json").exists());
+    let account = magic(home.path()).args(["pi", "account"]).output().unwrap();
+    assert!(account.status.success());
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&account.stdout).unwrap()["mode"],
+        "local"
+    );
+
     // Stale connection and lock files do not prevent the next login attempt.
     let login = magic(home.path())
         .args(["--server-url", "http://127.0.0.1:0", "login"])
@@ -112,6 +154,11 @@ async fn cloud_authentication_blocks_local_start_before_initialization() {
         json!({"server":url,"token":"valid"}).to_string(),
     )
     .unwrap();
+    fs::write(
+        directory.join("selection.json"),
+        json!({"mode":"cloud", "server":url}).to_string(),
+    )
+    .unwrap();
     let path = home.path().to_owned();
     let output = tokio::task::spawn_blocking(move || {
         magic(&path).args(["server", "start"]).output().unwrap()
@@ -122,4 +169,18 @@ async fn cloud_authentication_blocks_local_start_before_initialization() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("logout"));
     assert!(!home.path().join(".config/magicmtn/local").exists());
     server.abort();
+}
+
+#[test]
+fn failed_start_does_not_select_local_mode() {
+    let home = tempfile::tempdir().unwrap();
+    let output = magic(home.path())
+        .args(["server", "start", "--bind", "0.0.0.0:0"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(!home
+        .path()
+        .join(".config/magicmtn/cli/selection.json")
+        .exists());
 }

@@ -18,6 +18,14 @@ pub enum Commands {
 }
 
 pub async fn run(api: &Api, command: Commands) -> Result<()> {
+    if api.local && matches!(&command, Commands::Install { agent } if agent == "pi") {
+        let directory = crate::pi::install_extension()?;
+        println!(
+            "Installed /magic in {}. Start Pi or run /reload.",
+            directory.display()
+        );
+        return Ok(());
+    }
     ensure!(api.token.is_some(), "sign in first with `magic login`");
     match command {
         Commands::Install { agent } if agent == "pi" => {

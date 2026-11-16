@@ -43,45 +43,18 @@ impl Credentials {
             .map(|value| value["token"].as_str().unwrap().to_owned()))
     }
 
-    /// Check every saved remote session, including explicit server overrides.
-    pub(crate) async fn ensure_signed_out(&self) -> Result<()> {
-        let entries = match fs::read_dir(&self.directory) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(error).context("reading saved CLI sessions"),
+    /// Check the consumer's Cloud session without contacting developer servers.
+    pub(crate) fn ensure_signed_out(&self, server: &Url) -> Result<()> {
+        let token = self.load(server)?;
+        let logout = if server.as_str() == "https://api.magicmtn.ai/" {
+            "magic logout".to_owned()
+        } else {
+            format!("magic --server-url {server} logout")
         };
-        for entry in entries {
-            let path = entry?.path();
-            if path.extension().and_then(|value| value.to_str()) != Some("json") {
-                continue;
-            }
-            // Pi workspace defaults share this directory. Only session files
-            // use an unprefixed SHA-256 digest as their name (see `path`).
-            let Some(stem) = path.file_stem().and_then(|value| value.to_str()) else {
-                continue;
-            };
-            if stem.len() != 64
-                || !stem
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-            {
-                continue;
-            }
-            let saved: Value =
-                serde_json::from_slice(&fs::read(&path)?).context("invalid saved CLI session")?;
-            let mut api = Api::new(required_string(&saved, "server")?)?;
-            api.token = self.load(&api.base)?;
-            let logout = if api.base.as_str() == "https://api.magicmtn.ai/" {
-                "magic logout".to_owned()
-            } else {
-                format!("magic --server-url {} logout", api.base)
-            };
-            ensure!(
-                account(&api).await?["signed_in"] != true,
-                "signed in to MagicMtn Cloud at {}; run `{logout}` before `magic server start`",
-                api.base
-            );
-        }
+        ensure!(
+            token.is_none(),
+            "signed in to MagicMtn Cloud at {server}; run `{logout}` before `magic server start`"
+        );
         Ok(())
     }
 
@@ -250,7 +223,12 @@ pub(crate) fn open_browser(url: &Url) -> Result<()> {
 }
 
 pub(crate) async fn login(api: &Api, client: &str) -> Result<()> {
-    let _mode = crate::mode::login()?;
+    let development = crate::mode::development_server(&api.base);
+    let _mode = if development {
+        None
+    } else {
+        Some(crate::mode::login()?)
+    };
     let (origin, handoff, url) = start(api, client).await?;
     println!("Sign in and approve CLI access in your browser:\n{url}");
     if open_browser(&url).is_err() {
@@ -258,6 +236,11 @@ pub(crate) async fn login(api: &Api, client: &str) -> Result<()> {
     }
     let (token, plan) = wait_for_approval(api, &origin, &handoff, Duration::from_secs(300)).await?;
     Credentials::new()?.save(&api.base, &token, Some(&plan))?;
+    if !development {
+        crate::mode::select(&crate::mode::Selection::Cloud {
+            server: api.base.to_string(),
+        })?;
+    }
     println!(
         "Signed in to MagicMtn.{}",
         if client == "pi" {
@@ -292,6 +275,9 @@ pub(crate) async fn logout(api: &Api) -> Result<()> {
 }
 
 pub(crate) async fn account(api: &Api) -> Result<Value> {
+    if api.local {
+        return Ok(json!({"mode":"local", "signed_in":false, "server":api.base.as_str()}));
+    }
     if api.token.is_none() {
         return Ok(json!({"signed_in":false}));
     }
@@ -409,7 +395,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn local_start_checks_all_saved_sessions_and_allows_expired_credentials() -> Result<()> {
+    async fn local_start_checks_selected_cloud_session_without_network_requests() -> Result<()> {
         let app = Router::new().route(
             "/auth/me",
             get(|headers: HeaderMap| async move {
@@ -430,7 +416,7 @@ mod tests {
         let credentials = Credentials {
             directory: directory.path().join("cli"),
         };
-        credentials.ensure_signed_out().await?;
+        credentials.ensure_signed_out(&url)?;
         fs::create_dir_all(&credentials.directory)?;
         let defaults_path = credentials
             .directory
@@ -438,21 +424,127 @@ mod tests {
         let defaults = br#"{"inference_source":"magicmtn","model_id":"model"}"#;
         fs::write(&defaults_path, defaults)?;
         fs::write(credentials.directory.join("other.json"), b"invalid JSON")?;
-        credentials.ensure_signed_out().await?;
+        credentials.ensure_signed_out(&url)?;
         assert_eq!(fs::read(&defaults_path)?, defaults);
         credentials.save(&url, "valid", None)?;
-        let error = credentials
-            .ensure_signed_out()
-            .await
-            .unwrap_err()
-            .to_string();
+        let error = credentials.ensure_signed_out(&url).unwrap_err().to_string();
         assert!(error.contains("logout"));
         credentials.save(&url, "expired", None)?;
-        credentials.ensure_signed_out().await?;
+        assert!(credentials.ensure_signed_out(&url).is_err());
+        credentials.remove(&url)?;
+        credentials.save(
+            &Url::parse("http://127.0.0.1:1/")?,
+            "developer-session",
+            None,
+        )?;
         server.abort();
-        assert!(credentials.ensure_signed_out().await.is_err());
+        credentials.ensure_signed_out(&url)?;
         fs::write(credentials.path(&url), b"{}")?;
-        assert!(credentials.ensure_signed_out().await.is_err());
+        assert!(credentials.ensure_signed_out(&url).is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn successful_cloud_login_selects_cloud_only_after_approval() -> Result<()> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let address = listener.local_addr()?;
+        let base = format!("http://cloud.example.test:{}", address.port());
+        let app = Router::new()
+            .route("/auth/config", get(|State(base): State<String>| async move { Json(json!({"origin":base})) }))
+            .route("/auth/desktop/start", post(|State(base): State<String>| async move { Json(json!({"id":"request", "secret":"approved-session", "url":format!("{base}/auth/desktop?request=request")})) }))
+            .route("/auth/desktop/poll", post(|| async { Json(json!({"approved":true, "plan_access":{"plan":"ascent", "access_active":true}})) }))
+            .with_state(base.clone());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let home = tempfile::tempdir()?;
+        let directory = home.path().join(".config/magicmtn/cli");
+        fs::create_dir_all(&directory)?;
+        fs::write(
+            directory.join("selection.json"),
+            json!({"mode":"local", "directory":home.path().join("local")}).to_string(),
+        )?;
+        let bin = home.path().join("bin");
+        fs::create_dir_all(&bin)?;
+        for name in ["open", "xdg-open"] {
+            let browser = bin.join(name);
+            fs::write(&browser, "#!/bin/sh\nexit 0\n")?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(browser, fs::Permissions::from_mode(0o700))?;
+            }
+        }
+        let path = home.path().to_owned();
+        let endpoint = base.clone();
+        let output = tokio::task::spawn_blocking(move || {
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "authentication::tests::login_in_isolated_process",
+                    "--nocapture",
+                ])
+                .env("HOME", path)
+                .env("MAGICMTN_TEST_LOGIN_ENDPOINT", endpoint)
+                .env("MAGICMTN_TEST_LOGIN_ADDRESS", address.to_string())
+                .env(
+                    "PATH",
+                    std::env::join_paths([
+                        bin.as_path(),
+                        std::path::Path::new("/usr/bin"),
+                        std::path::Path::new("/bin"),
+                    ])
+                    .unwrap(),
+                )
+                .output()
+                .unwrap()
+        })
+        .await?;
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let selected: Value = serde_json::from_slice(&fs::read(directory.join("selection.json"))?)?;
+        assert_eq!(selected["mode"], "cloud");
+        assert_eq!(selected["server"], format!("{base}/"));
+        server.abort();
+        Ok(())
+    }
+
+    // A subprocess isolates HOME and the real mode/credential files while using
+    // the production login flow and a client with a local DNS fixture.
+    #[tokio::test]
+    async fn login_in_isolated_process() -> Result<()> {
+        let Ok(base) = std::env::var("MAGICMTN_TEST_LOGIN_ENDPOINT") else {
+            return Ok(());
+        };
+        let address: std::net::SocketAddr =
+            std::env::var("MAGICMTN_TEST_LOGIN_ADDRESS")?.parse()?;
+        let mut api = Api::new(&base)?;
+        api.client = reqwest::Client::builder()
+            .no_proxy()
+            .resolve("cloud.example.test", address)
+            .build()?;
+        let developer = Api::new(&format!("http://{address}"))?;
+        let running = crate::mode::server()?;
+        login(&developer, "cli").await?;
+        assert!(matches!(
+            crate::mode::selected()?,
+            Some(crate::mode::Selection::Local { .. })
+        ));
+        drop(running);
+        let mut failure = Api::new(&format!("{base}/failure"))?;
+        failure.client = api.client.clone();
+        assert!(login(&failure, "cli").await.is_err());
+        assert!(matches!(
+            crate::mode::selected()?,
+            Some(crate::mode::Selection::Local { .. })
+        ));
+        login(&api, "cli").await?;
+        assert_eq!(
+            Credentials::new()?.load(&api.base)?.as_deref(),
+            Some("approved-session")
+        );
         Ok(())
     }
 
