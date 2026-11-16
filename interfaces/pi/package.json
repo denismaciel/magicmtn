@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "index.js",
+    "local.js",
     "inference.js",
     "workspace.js",
     "picker.js",

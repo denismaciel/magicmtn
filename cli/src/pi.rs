@@ -138,10 +138,17 @@ fn write_extension(directory: &std::path::Path, executable: &std::path::Path) ->
         directory.join("inference.js"),
         include_str!("../../interfaces/pi/inference.js"),
     )?;
+    fs::write(
+        directory.join("local.js"),
+        include_str!("../../interfaces/pi/local.js"),
+    )?;
     fs::write(directory.join("package.json"), "{\"type\":\"module\"}\n")?;
     Ok(())
 }
 pub async fn run(api: &Api, command: Commands) -> Result<()> {
+    if api.local && !matches!(&command, Commands::Account | Commands::Install) {
+        bail!("Use /magic in Pi to manage local sandboxes and /model to select Pi inference");
+    }
     let result = match command {
         Commands::Account => crate::authentication::account(api).await?,
         Commands::Install => {

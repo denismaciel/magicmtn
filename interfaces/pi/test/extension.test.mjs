@@ -12,7 +12,7 @@ const connection = { id: "7f0b4271-bf76-4de0-8e76-ddd1b0e5ee13", display_name: "
 const model = { id: "5269bd6d-e31d-42e8-812f-989be2bb3e57", display_name: "Model", provider: "fireworks" };
 const workspace = { id: "d215125b-4896-4ca4-a36f-aefdeea095fb", provider: "exe", status: "running", created_at: "2026-10-14" };
 
-async function fixture(t, { image = true, workspaces = [], failCreate = false, interruptAttach = false, removeCliBeforeAttach = false, signedIn = true, models = [model], connections = [connection], defaults = {} } = {}) {
+async function fixture(t, { image = true, workspaces = [], failCreate = false, interruptAttach = false, removeCliBeforeAttach = false, signedIn = true, local = false, models = [model], connections = [connection], defaults = {} } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "magicmtn-extension-"));
   const log = join(directory, "calls.jsonl");
   writeFileSync(log, "");
@@ -22,7 +22,7 @@ async function fixture(t, { image = true, workspaces = [], failCreate = false, i
   writeFileSync(workspacesPath, JSON.stringify(workspaces));
   writeFileSync(catalogPath, JSON.stringify({ models, defaults: { model_id: models[0]?.id, ...defaults }, default_image: image ? { display_name: "MagicMtn Canonical" } : null }));
   const account = { signed_in: true, user: { display_name: "Rodrigo", email: "rodrigo@example.test" } };
-  writeFileSync(accountPath, JSON.stringify(signedIn ? account : { signed_in: false }));
+  writeFileSync(accountPath, JSON.stringify(local ? {mode:"local",signed_in:false} : signedIn ? account : { signed_in: false }));
   const originalPath = process.env.PATH;
   const impostor = join(directory, "impostor");
   // Every test, including terminal attachment, must bypass a hostile PATH.
@@ -31,8 +31,11 @@ async function fixture(t, { image = true, workspaces = [], failCreate = false, i
   process.env.PATH = `${impostor}:${originalPath}`;
   const cli = `#!${process.execPath}
 import fs from 'node:fs';
-const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\\n');
+let args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\\n');
+if(args[0]==='--local')args=args.slice(1);
 let result;
+if(args[0]==='mcp' && args[1]==='tools')result=[{name:'sandbox_list',description:'List local sandboxes',inputSchema:{type:'object',properties:{}}},{name:'sandbox_create',description:'Create local sandbox',inputSchema:{type:'object',properties:{image:{type:'string'}}}}];
+if(args[0]==='mcp' && args[1]==='call'){const input=JSON.parse(fs.readFileSync(0,'utf8'));const value=args[2]==='sandbox_list'?JSON.parse(fs.readFileSync(${JSON.stringify(workspacesPath)},'utf8')):${JSON.stringify(workspace)};result={content:[{type:'text',text:JSON.stringify(value)}],details:{}};}
 if(args[1]==='attach'){if(${interruptAttach})process.kill(process.pid,'SIGTERM');process.exit(0)}
 if(args[1]==='connect')result={id:'pi-connection'};
 if(['status','stop','restart'].includes(args[1]))result={state:'running',generation:2};
@@ -57,8 +60,13 @@ console.log(JSON.stringify(result));`;
   let provider;
   let available = false;
   const handlers = new Map();
+  const tools = new Map();
+  let activeTools = ["read", "bash"];
   const pi = {
     on(event, handler) { handlers.set(event, handler); },
+    registerTool(tool) { tools.set(tool.name,tool); activeTools=[...new Set([...activeTools,tool.name])]; },
+    getActiveTools() { return activeTools; },
+    setActiveTools(names) { activeTools=names; },
     registerCommand(name, value) { assert.equal(name, "magic"); command = value; },
     registerProvider(value) { provider = value; available = false; },
     unregisterProvider(name) { assert.equal(name, "magicmtn"); provider = undefined; },
@@ -72,7 +80,7 @@ console.log(JSON.stringify(result));`;
   const index = join(directory, "index.js");
   let source = readFileSync(new URL("../index.js", import.meta.url), "utf8")
     .replace("const magicExecutable = null;", `const magicExecutable = ${JSON.stringify(join(directory, "magic"))};`);
-  for (const name of ["workspace.js", "picker.js", "inference.js"]) {
+  for (const name of ["workspace.js", "picker.js", "inference.js", "local.js"]) {
     source = source.replace(`"./${name}"`, JSON.stringify(new URL(`../${name}`, import.meta.url).href));
   }
   writeFileSync(index, source);
@@ -80,11 +88,13 @@ console.log(JSON.stringify(result));`;
   extension(pi);
   const ctx = {
     mode: "tui", async waitForIdle() {},
+    model: undefined,
     modelRegistry: {
       async refresh() { available = true; },
       find(name, id) { return available && provider?.id === name ? provider.getModels().find((entry) => entry.id === id) : undefined; },
     },
     ui: {
+      async input() { return choices.shift(); },
       async select(title, items) { menus.push({ title, items }); const next = choices.shift(); return typeof next === "number" ? items[next] : next; },
       notify(message, type) { notices.push({ message, type }); },
       setStatus(key, value) { statuses.set(key, value); },
@@ -104,7 +114,7 @@ console.log(JSON.stringify(result));`;
       },
     },
   };
-  return { ctx, command, choices, menus, notices, terminalEvents, statuses, calls, handlers, provider: () => provider };
+  return { ctx, command, choices, menus, notices, terminalEvents, statuses, calls, handlers, tools, activeTools: () => activeTools, setAccount: (account) => writeFileSync(accountPath, JSON.stringify(account)), provider: () => provider };
 }
 
 test("signed-in menu shows the account name without authentication options", async (t) => {
@@ -129,7 +139,7 @@ test("Default uses account catalogs, chooses only a model, and saves without pro
   assert.equal(f.menus[0].title, "Choose default model");
   assert.match(f.menus[0].rendered, /Model Name:/);
   assert.equal(f.menus.length, 1);
-  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "defaults", "--model", baseten.id]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"], ["pi", "defaults", "--model", baseten.id]]);
   assert.ok(f.notices.some(({message}) => message.includes("/magic new") && message.includes("/magic view")));
   await f.command.handler("", f.ctx);
   assert.equal(f.menus.at(-1).items[0], "Default (GLM 5.3 Flash)");
@@ -155,14 +165,14 @@ test("cancelling the model picker preserves defaults", async (t) => {
   const f = await fixture(t);
   f.choices.push(undefined);
   await f.command.handler("default", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"]]);
 });
 test("Left from default model returns to the main menu", async (t) => {
   const f = await fixture(t);
   f.choices.push("<left>", undefined);
   await f.command.handler("default", f.ctx);
   assert.equal(f.menus[1].title, "MagicMtn · Rodrigo");
-  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "account"], ["pi", "catalog"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"], ["pi", "catalog"]]);
 });
 test("sandbox and inference lists can return to the main menu with Left", async (t) => {
   const f = await fixture(t, { workspaces: [workspace] });
@@ -179,7 +189,7 @@ test("Left from termination confirmation returns to sandbox actions, then to the
   await f.command.handler("view", f.ctx);
   assert.deepEqual(f.menus[3].items, ["Enter/ssh", "Terminate", "Stop agent", "Restart agent"]);
   assert.equal(f.menus[4].title, "Sandboxes");
-  assert.deepEqual(f.calls(), [["pi", "list"], ["pi", "list"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "list"], ["pi", "list"]]);
 });
 test("signed-out menu directs users to the CLI without opening a picker", async (t) => {
   const f = await fixture(t, { signedIn: false });
@@ -192,7 +202,7 @@ test("signed-out menu directs users to the CLI without opening a picker", async 
 test("creates the default workspace without selection menus and hands the terminal to its real pi", async (t) => {
   const f = await fixture(t);
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "create", "--model", model.id], ["pi", "attach", workspace.id]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"], ["pi", "create", "--model", model.id], ["pi", "attach", workspace.id]]);
   assert.deepEqual(f.terminalEvents, ["stop", "start"]);
   assert.match(f.statuses.get("magicmtn-workspace"), /Local pi.*disconnected from MagicMtn sandbox d215125b/);
   assert.deepEqual(f.menus, []);
@@ -212,20 +222,20 @@ test("new workspace cannot provision without a MagicMtn model", async (t) => {
   const f = await fixture(t, { models: [] });
   f.choices.push(0);
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"]]);
   assert.match(f.notices.at(-1).message, /No default inference model/);
 });
 test("new without saved defaults uses managed inference even with a current Pi model", async (t) => {
   const f = await fixture(t);
   f.ctx.model = { id: "local-kimi", provider: "moonshot", api: "openai-completions" };
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "create", "--model", model.id], ["pi", "attach", workspace.id]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"], ["pi", "create", "--model", model.id], ["pi", "attach", workspace.id]]);
 });
 test("no eligible managed default does not silently connect the current Pi model", async (t) => {
   const f = await fixture(t, { models: [] });
   f.ctx.model = { id: "local-kimi", provider: "moonshot", api: "openai-completions" };
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"]]);
   assert.match(f.notices.at(-1).message, /No default inference model/);
 });
 test("new uses saved defaults even when they are not first in the catalog", async (t) => {
@@ -234,7 +244,7 @@ test("new uses saved defaults even when they are not first in the catalog", asyn
   const f = await fixture(t, { models: [model, secondModel], connections: [connection, secondConnection], defaults: { inference_source: "magicmtn", model_id: secondModel.id, connection_id: secondConnection.id } });
   f.ctx.model = { id: "local-model", provider: "local" };
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls()[1], ["pi", "create", "--model", secondModel.id]);
+  assert.deepEqual(f.calls()[2], ["pi", "create", "--model", secondModel.id]);
   assert.deepEqual(f.menus, []);
 });
 test("new connects the current Pi model when Pi is the default inference source", async (t) => {
@@ -243,7 +253,7 @@ test("new connects the current Pi model when Pi is the default inference source"
   f.ctx.modelRegistry.isUsingOAuth = () => false;
   f.ctx.modelRegistry.getApiKeyAndHeaders = async () => ({ ok: true, apiKey: "test-key" });
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "connect"], ["pi", "create", "--pi-connection", "pi-connection"], ["pi", "attach", workspace.id]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"], ["pi", "connect"], ["pi", "create", "--pi-connection", "pi-connection"], ["pi", "attach", workspace.id]]);
   assert.deepEqual(f.menus, []);
 });
 test("unexpected local Pi extension errors report only the operation", async (t) => {
@@ -252,7 +262,7 @@ test("unexpected local Pi extension errors report only the operation", async (t)
   f.ctx.modelRegistry.isUsingOAuth = () => { throw new Error("private registry detail"); };
   await f.command.handler("new", f.ctx);
   assert.deepEqual(f.calls(), [
-    ["pi", "catalog"],
+    ["pi", "account"], ["pi", "catalog"],
     ["pi", "report-error", "--operation", "create"],
   ]);
   assert.match(f.notices.at(-1).message, /private registry detail/);
@@ -267,13 +277,13 @@ test("an interrupted attach reports the attach operation without terminal output
 test("a missing magic executable shows the launch error", async (t) => {
   const f = await fixture(t, { removeCliBeforeAttach: true });
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls().map((args) => args[1]), ["catalog", "create"]);
+  assert.deepEqual(f.calls().map((args) => args[1]), ["account", "catalog", "create"]);
   assert.match(f.notices.at(-1).message, /refresh its saved path/);
 });
 test("new workspace delegates placement without a backend catalog", async (t) => {
   const f = await fixture(t, { connections: [] });
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls()[1], ["pi", "create", "--model", model.id]);
+  assert.deepEqual(f.calls()[2], ["pi", "create", "--model", model.id]);
 });
 test("open lists every live instance across backends without grouping", async (t) => {
   const second = { ...workspace, id: "second-apple", provider: "apple-container" };
@@ -286,24 +296,24 @@ test("open lists every live instance across backends without grouping", async (t
   assert.doesNotMatch(f.menus[0].items.join(" "), /exe.dev|Apple Container/);
   assert.match(f.menus[0].items[1], /MagicMtn Canonical/);
   assert.deepEqual(f.menus[1].items, ["Enter/ssh", "Terminate", "Stop agent", "Restart agent"]);
-  assert.deepEqual(f.calls(), [["pi", "list"], ["pi", "attach", third.id]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "list"], ["pi", "attach", third.id]]);
 });
 test("open with no live workspaces does not start provisioning", async (t) => {
   const f = await fixture(t);
   await f.command.handler("open", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "list"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "list"]]);
   assert.match(f.notices.at(-1).message, /No live workspaces/);
 });
 test("reconnects an existing workspace without provisioning another VM", async (t) => {
   const f = await fixture(t, { workspaces: [workspace] });
   f.choices.push(0, 0);
   await f.command.handler("open", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "list"], ["pi", "attach", workspace.id]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "list"], ["pi", "attach", workspace.id]]);
 });
 test("missing default image and uncertain creation never fall through to attach", async (t) => {
   const f = await fixture(t, { image: false });
   await f.command.handler("new", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"]]);
   assert.match(f.notices[0].message, /published and enabled/);
 });
 test("an uncertain create is surfaced and is not automatically retried", async (t) => {
@@ -318,7 +328,7 @@ test("inference-only registers a scoped provider without creating a VM", async (
   const f = await fixture(t);
   f.choices.push(0);
   await f.command.handler("inference", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "inference", "--model", model.id]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"], ["pi", "inference", "--model", model.id]]);
   assert.equal(f.provider().id, "magicmtn");
   assert.equal(f.ctx.model.provider, "magicmtn");
   assert.equal(f.ctx.model.id, "fireworks/model:5269bd6d");
@@ -349,7 +359,7 @@ test("termination uses the existing workspace lifecycle", async (t) => {
   const f = await fixture(t, { workspaces: [workspace] });
   f.choices.push(0, 1, 1);
   await f.command.handler("view", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "list"], ["pi", "terminate", workspace.id], ["pi", "list"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "list"], ["pi", "terminate", workspace.id], ["pi", "list"]]);
   assert.ok(f.notices.some((notice) => /ended/.test(notice.message)));
 });
 
@@ -358,7 +368,7 @@ test("terminating one sandbox refreshes the list and preserves other sandboxes",
   const f = await fixture(t, { workspaces: [workspace, other] });
   f.choices.push(0, 1, 1, undefined);
   await f.command.handler("view", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "list"], ["pi", "terminate", workspace.id], ["pi", "list"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "list"], ["pi", "terminate", workspace.id], ["pi", "list"]]);
   assert.equal(f.menus.at(-1).title, "Sandboxes");
   assert.equal(f.menus.at(-1).items.length, 1);
   assert.match(f.menus.at(-1).rendered, /711189e2/);
@@ -368,7 +378,7 @@ test("cancelling termination leaves the sandbox available without entering it", 
   const f = await fixture(t, { workspaces: [workspace] });
   f.choices.push(0, 1, 0, undefined);
   await f.command.handler("view", f.ctx);
-  assert.deepEqual(f.calls(), [["pi", "list"]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "list"]]);
   assert.deepEqual(f.menus.at(-1).items, ["Enter/ssh", "Terminate", "Stop agent", "Restart agent"]);
 });
 
@@ -414,7 +424,7 @@ test("inference selection updates Pi's actual current model and keeps the full c
   assert.equal(f.ctx.model.provider, "magicmtn");
   assert.equal(f.ctx.model.id, "fireworks/second-model:second-m");
   assert.deepEqual(f.provider().getModels().map((entry) => entry.id), ["fireworks/model:5269bd6d", "fireworks/second-model:second-m"]);
-  assert.deepEqual(f.calls(), [["pi", "catalog"], ["pi", "inference", "--model", second.id]]);
+  assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"], ["pi", "inference", "--model", second.id]]);
   assert.match(f.statuses.get("magicmtn"), /Second model/);
   await f.handlers.get("model_select")({ model: { provider: "anthropic", id: "direct" } }, f.ctx);
   assert.equal(f.statuses.get("magicmtn"), undefined);
@@ -425,4 +435,48 @@ test("signed-out startup does not advertise managed models or request their cata
   await f.handlers.get("session_start")({}, f.ctx);
   assert.equal(f.provider(), undefined);
   assert.deepEqual(f.calls(), [["pi", "account"]]);
+});
+
+test("local startup keeps Pi's own model and loads sandbox tools without Cloud catalogs", async (t) => {
+  const f = await fixture(t, { local: true });
+  const native = { id: "my-model", provider: "my-provider", api: "openai-responses" };
+  f.ctx.model = native;
+  await f.handlers.get("session_start")({}, f.ctx);
+  assert.equal(f.ctx.model, native);
+  assert.equal(f.provider(), undefined);
+  assert.deepEqual(f.calls(), [["pi","account"],["--local","mcp","tools"]]);
+  assert.match(f.statuses.get("magicmtn"), /Local.*sandbox tools/);
+  assert.ok(f.tools.has("magic_sandbox_list"));
+  assert.deepEqual(f.notices, []);
+  await f.tools.get("magic_sandbox_list").execute("tool-id", {});
+  assert.deepEqual(f.calls().at(-1), ["--local","mcp","call","sandbox_list"]);
+});
+
+test("local menu creates a sandbox without model connections, account catalogs, or terminal takeover", async (t) => {
+  const f = await fixture(t, { local: true });
+  f.choices.push("python:3.13-alpine");
+  await f.command.handler("new", f.ctx);
+  assert.deepEqual(f.calls(), [["pi","account"],["--local","mcp","tools"],["--local","mcp","call","sandbox_create"]]);
+  assert.deepEqual(f.terminalEvents, []);
+  assert.match(f.notices[0].message, /Created sandbox/);
+});
+
+test("local inference selection directs users to Pi's model picker without a Cloud login", async (t) => {
+  const f = await fixture(t, { local: true });
+  await f.command.handler("inference", f.ctx);
+  assert.deepEqual(f.calls(), [["pi","account"],["--local","mcp","tools"]]);
+  assert.deepEqual(f.notices, [{ message:"Choose your Pi model with /model. Pi uses your existing provider login.", type:"info" }]);
+});
+
+test("mode changes disable local tools only when the CLI selects Cloud again", async (t) => {
+  const f = await fixture(t, { local: true });
+  await f.handlers.get("session_start")({}, f.ctx);
+  await f.handlers.get("before_agent_start")({}, f.ctx);
+  assert.ok(f.activeTools().includes("magic_sandbox_list"));
+  assert.ok(!f.calls().some((args) => args[1] === "catalog"));
+  f.setAccount({signed_in:true, user:{display_name:"Person"}});
+  await f.handlers.get("before_agent_start")({}, f.ctx);
+  assert.ok(!f.activeTools().includes("magic_sandbox_list"));
+  assert.ok(f.activeTools().includes("bash"));
+  assert.ok(f.provider());
 });

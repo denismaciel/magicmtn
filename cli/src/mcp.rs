@@ -10,6 +10,12 @@ use std::io::{BufRead, Write};
 pub enum Commands {
     /// Expose sandbox tools over MCP stdio (stdout is reserved for JSON-RPC)
     Serve,
+    /// Print sandbox tool definitions as JSON
+    #[command(hide = true)]
+    Tools,
+    /// Call a sandbox tool with JSON arguments on stdin
+    #[command(hide = true)]
+    Call { name: String },
 }
 
 const FILE_LIMIT: usize = 16 * 1024;
@@ -26,10 +32,10 @@ fn tool(
     json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},
         "annotations":{"readOnlyHint":read,"destructiveHint":destructive,"idempotentHint":read,"openWorldHint":true}})
 }
-fn tools() -> Value {
+fn tools(local: bool) -> Value {
     let id = json!({"type":"string","description":"Sandbox UUID or unique hexadecimal prefix"});
     let path = json!({"type":"string","description":"Absolute path inside the sandbox"});
-    json!([
+    let mut definitions = json!([
         tool("sandbox_list", "List MagicMtn sandboxes. No files or credentials are copied locally.", json!({}), &[], true, false),
         tool("sandbox_create", "Create a managed sandbox using MagicMtn Canonical and automatic placement. Keep the ID. On uncertainty, inspect that ID instead of creating a replacement.", json!({"idempotency_key":{"type":"string","format":"uuid","description":"Reuse the same UUID when retrying one creation intent; omitted generates a new intent"}}), &[], false, false),
         tool("sandbox_show", "Inspect a sandbox's state and lifetime.", json!({"id":id}), &["id"], true, false),
@@ -37,7 +43,17 @@ fn tools() -> Value {
         tool("sandbox_read_file", "Read a UTF-8 file inside the sandbox (maximum 16 KiB).", json!({"id":id,"path":path}), &["id","path"], true, false),
         tool("sandbox_write_file", "Write UTF-8 text inside the sandbox (maximum 16 KiB), replacing the file. Parent directories must exist. Does not read any local file.", json!({"id":id,"path":path,"content":{"type":"string"}}), &["id","path","content"], false, true),
         tool("sandbox_terminate", "Delete a sandbox and its files. Only use when the user authorizes deletion.", json!({"id":id}), &["id"], false, true)
-    ])
+    ]);
+    if local {
+        let create = &mut definitions[1];
+        create["description"] = json!("Create a sandbox on the local MagicMtn server. Keep its ID and inspect that ID after uncertain results before retrying. Pi and its model credentials stay on your computer.");
+        create["inputSchema"]["properties"]["image"] = json!({"type":"string", "description":"OCI image, for example python:3.13-alpine", "default":"python:3.13-alpine"});
+        definitions[3]["inputSchema"]["properties"]["cwd"]["default"] = json!("/");
+        let create = &mut definitions[1];
+        create["inputSchema"]["properties"]["provider"] =
+            json!({"type":"string", "description":"Installed sandbox provider"});
+    }
+    definitions
 }
 fn string<'a>(args: &'a Value, key: &str) -> Result<&'a str> {
     args.get(key)
@@ -62,8 +78,8 @@ fn summary(record: &Value) -> Value {
     }
     Value::Object(result)
 }
-fn validate_args(name: &str, args: &Value) -> Result<()> {
-    let definitions = tools();
+fn validate_args(local: bool, name: &str, args: &Value) -> Result<()> {
+    let definitions = tools(local);
     let definition = definitions
         .as_array()
         .unwrap()
@@ -93,7 +109,7 @@ fn validate_args(name: &str, args: &Value) -> Result<()> {
     Ok(())
 }
 async fn call(api: &Api, name: &str, args: &Value) -> Result<Value> {
-    validate_args(name, args)?;
+    validate_args(api.local, name, args)?;
     ensure!(
         api.token.is_some(),
         "Run `magic login` in your terminal, then reconnect the MCP server"
@@ -115,7 +131,29 @@ async fn call(api: &Api, name: &str, args: &Value) -> Result<Value> {
                 }
                 None => uuid::Uuid::new_v4(),
             };
-            let record = api.request(Method::POST, "v1/sandboxes/managed", Some(crate::pi::managed_creation_body(api, None, None, key).await?)).await
+            let (route, body) = if api.local {
+                let image = args
+                    .get("image")
+                    .and_then(Value::as_str)
+                    .unwrap_or("python:3.13-alpine");
+                let provider = args.get("provider").and_then(Value::as_str).unwrap_or(
+                    if cfg!(target_os = "macos") {
+                        "apple-container"
+                    } else {
+                        "firecracker"
+                    },
+                );
+                (
+                    "v1/sandboxes",
+                    json!({"template":format!("image:{image}"), "provider":provider, "idempotency_key":key}),
+                )
+            } else {
+                (
+                    "v1/sandboxes/managed",
+                    crate::pi::managed_creation_body(api, None, None, key).await?,
+                )
+            };
+            let record = api.request(Method::POST, route, Some(body)).await
                 .with_context(|| format!("Creation intent {key}; inspect sandbox_show with this ID before retrying. Reuse idempotency_key {key} for the same intent"))?;
             Ok(summary(&record))
         }
@@ -130,7 +168,11 @@ async fn call(api: &Api, name: &str, args: &Value) -> Result<Value> {
                         .await?,
                 )),
                 "sandbox_exec" | "sandbox_read_file" | "sandbox_write_file" => {
-                    let body = execution(name, args)?;
+                    let body = if api.local {
+                        local_execution(name, args)?
+                    } else {
+                        execution(name, args)?
+                    };
                     api.request(Method::POST, &format!("{route}/exec"), Some(body))
                         .await
                 }
@@ -177,6 +219,50 @@ fn execution(name: &str, args: &Value) -> Result<Value> {
     crate::execution::request(script, &argv, timeout)
 }
 
+fn local_execution(name: &str, args: &Value) -> Result<Value> {
+    // Reuse the same bounds and argument validation as the Cloud tools.
+    let mut validated = args.clone();
+    if name == "sandbox_exec" && validated.get("cwd").is_none() {
+        validated["cwd"] = json!("/");
+    }
+    execution(name, &validated)?;
+    let (script, arguments) = match name {
+        "sandbox_exec" => (
+            "cd \"$1\" && exec /bin/sh -lc \"$2\"",
+            vec![
+                string(&validated, "cwd")?.to_owned(),
+                string(args, "command")?.to_owned(),
+            ],
+        ),
+        "sandbox_read_file" => (
+            "head -c 16385 -- \"$1\"",
+            vec![string(args, "path")?.to_owned()],
+        ),
+        "sandbox_write_file" => {
+            use base64::Engine;
+            let content =
+                base64::engine::general_purpose::STANDARD.encode(string(args, "content")?);
+            let mut arguments = vec![string(args, "path")?.to_owned()];
+            arguments.extend(
+                content
+                    .as_bytes()
+                    .chunks(2048)
+                    .map(|chunk| String::from_utf8(chunk.to_vec()).unwrap()),
+            );
+            (
+                "path=$1; shift; printf '%s' \"$@\" | base64 -d > \"$path\"",
+                arguments,
+            )
+        }
+        _ => bail!("unknown execution tool"),
+    };
+    let mut argv = vec!["-c".to_owned(), script.to_owned(), "--".to_owned()];
+    argv.extend(arguments);
+    Ok(
+        json!({"command":"/bin/sh", "args":argv, "timeout_ms":args.get("timeout_ms").and_then(Value::as_u64).unwrap_or(30000), "max_output_bytes":16384}),
+    )
+}
+
 fn error(id: Value, code: i64, message: &str) -> Value {
     json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}})
 }
@@ -200,7 +286,7 @@ async fn response(api: &Api, request: Value) -> Option<Value> {
             json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"magicmtn","version":env!("CARGO_PKG_VERSION")},"instructions":"Use these tools for remote sandbox work; built-in shell and file tools remain local. Never blindly retry uncertain mutations."})
         }
         "ping" => json!({}),
-        "tools/list" => json!({"tools":tools()}),
+        "tools/list" => json!({"tools":tools(api.local)}),
         "tools/call" => {
             let Some(name) = request["params"]["name"].as_str() else {
                 return Some(error(id, -32602, "tool name required"));
@@ -225,7 +311,33 @@ async fn response(api: &Api, request: Value) -> Option<Value> {
     Some(json!({"jsonrpc":"2.0","id":id,"result":result}))
 }
 
-pub async fn run(api: &Api, _: Commands) -> Result<()> {
+pub async fn run(api: &Api, command: Commands) -> Result<()> {
+    match command {
+        Commands::Tools => {
+            println!("{}", tools(api.local));
+            return Ok(());
+        }
+        Commands::Call { name } => {
+            use std::io::Read;
+            let mut input = String::new();
+            std::io::stdin()
+                .take(MESSAGE_LIMIT + 1)
+                .read_to_string(&mut input)?;
+            ensure!(
+                input.len() as u64 <= MESSAGE_LIMIT,
+                "tool arguments too large"
+            );
+            let value = call(api, &name, &serde_json::from_str(&input)?).await?;
+            let failed =
+                value.get("exit_code").is_some_and(|code| code != 0) || value["timed_out"] == true;
+            println!(
+                "{}",
+                json!({"content":[{"type":"text", "text":serde_json::to_string(&value)?}], "details":{}, "isError":failed})
+            );
+            return Ok(());
+        }
+        Commands::Serve => {}
+    }
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     let mut output = std::io::stdout().lock();
@@ -353,12 +465,13 @@ mod tests {
     #[test]
     fn arguments_are_validated_and_internal_metadata_is_not_exposed() {
         assert!(validate_args(
+            false,
             "sandbox_exec",
             &json!({"id":"abc","command":"true","timeout_ms":-1})
         )
         .is_err());
-        assert!(validate_args("sandbox_list", &json!({"url":"http://evil"})).is_err());
-        assert!(validate_args("unknown", &json!({})).is_err());
+        assert!(validate_args(false, "sandbox_list", &json!({"url":"http://evil"})).is_err());
+        assert!(validate_args(false, "unknown", &json!({})).is_err());
         assert_eq!(
             summary(&json!({"id":"abc","metadata":{"secret":"hidden"}})),
             json!({"id":"abc"})
@@ -374,6 +487,48 @@ mod tests {
         )
         .is_err());
     }
+    #[test]
+    fn local_tools_use_shell_utilities_and_preserve_literal_file_arguments() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("quotes' $dollar ; file");
+        let content = format!("hello\n世界\0{}", "x".repeat(FILE_LIMIT - 20));
+        let write = local_execution(
+            "sandbox_write_file",
+            &json!({"path":path,"content":content}),
+        )?;
+        let invoke = |body: &Value| {
+            std::process::Command::new(body["command"].as_str().unwrap())
+                .args(
+                    body["args"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|arg| arg.as_str().unwrap()),
+                )
+                .output()
+                .unwrap()
+        };
+        let written = invoke(&write);
+        assert!(
+            written.status.success(),
+            "{}",
+            String::from_utf8_lossy(&written.stderr)
+        );
+        assert_eq!(std::fs::read(&path)?, content.as_bytes());
+        let read = local_execution("sandbox_read_file", &json!({"path":path}))?;
+        assert_eq!(invoke(&read).stdout, content.as_bytes());
+        let execute = local_execution("sandbox_exec", &json!({"command":"printf local-tools"}))?;
+        assert_eq!(invoke(&execute).stdout, b"local-tools");
+        assert_eq!(
+            tools(true)[1]["inputSchema"]["properties"]["image"]["type"],
+            "string"
+        );
+        assert!(tools(false)[1]["inputSchema"]["properties"]
+            .get("image")
+            .is_none());
+        Ok(())
+    }
+
     #[test]
     fn remote_file_arguments_are_literal_and_round_trip_unicode() {
         let dir = tempfile::tempdir().unwrap();

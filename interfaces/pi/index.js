@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { providerLabel } from "./workspace.js";
 import { BACK, pickDefault } from "./picker.js";
 import { createInferenceProvider, uniqueModels } from "./inference.js";
+import { registerLocalTools, localMenu } from "./local.js";
 
 // Replaced with the installing CLI's absolute path by magic pi install.
 const magicExecutable = null;
@@ -12,9 +13,15 @@ function executable() {
 
 // The CLI alone owns account credentials and provider setup. Pi sees only a
 // short-lived inference grant when explicitly requested by the user.
+function consumerEnvironment() {
+  const env = { ...process.env };
+  delete env.MAGICMTN_SERVER_URL;
+  return env;
+}
+
 export function magic(args, signal, input) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable(), args, { stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], signal });
+    const child = spawn(executable(), args, { stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], signal, env: consumerEnvironment() });
     if (input !== undefined) {
       child.stdin.on("error", () => {});
       child.stdin.end(JSON.stringify(input));
@@ -93,7 +100,7 @@ async function terminal(ctx, args) {
     try {
       // The child owns the real terminal. No RPC UI emulation or duplicate agent
       // loop; after disconnect, pi restores its original local interface.
-      result = spawnSync(executable(), args, { stdio: "inherit" });
+      result = spawnSync(executable(), args, { stdio: "inherit", env: consumerEnvironment() });
     } finally {
       tui.start();
       tui.requestRender(true);
@@ -113,6 +120,22 @@ async function terminal(ctx, args) {
 
 export default function magicmtn(pi) {
   const inference = createInferenceProvider(magic);
+  let mode;
+  let localTools = [];
+  const synchronizeMode = async (ctx, account) => {
+    const next = account.mode === "local" ? "local" : "cloud";
+    if (next === "local") {
+      inference.clear();
+      pi.unregisterProvider("magicmtn");
+      if (mode !== "local") localTools = await registerLocalTools(pi, magic);
+      ctx.ui.setStatus("magicmtn", "MagicMtn · Local · sandbox tools");
+    } else if (mode === "local") {
+      pi.setActiveTools(pi.getActiveTools().filter((name) => !localTools.includes(name)));
+      ctx.ui.setStatus("magicmtn", undefined);
+    }
+    mode = next;
+    return next;
+  };
   const refreshModels = async (ctx, catalog) => {
     inference.load(catalog.models, catalog.defaults.model_id);
     pi.registerProvider(inference.provider);
@@ -121,6 +144,10 @@ export default function magicmtn(pi) {
     await ctx.modelRegistry.refresh({ allowNetwork: false, providers: ["magicmtn"] });
   };
   const updateStatus = (model, ctx) => {
+    if (mode === "local") {
+      ctx.ui.setStatus("magicmtn", "MagicMtn · Local · sandbox tools");
+      return;
+    }
     const managed = model?.provider === "magicmtn" && inference.model(model.id);
     ctx.ui.setStatus("magicmtn", managed
       ? `MagicMtn · local tools · ${managed.display_name} (${providerLabel(managed.provider)})`
@@ -129,6 +156,10 @@ export default function magicmtn(pi) {
   pi.on("session_start", async (_event, ctx) => {
     try {
       const account = await magic(["pi", "account"]);
+      if (await synchronizeMode(ctx, account) === "local") {
+        if (ctx.model?.provider === "magicmtn") ctx.ui.notify("Choose your Pi model with /model to use your provider in local mode.", "info");
+        return;
+      }
       if (account.signed_in) {
         await refreshModels(ctx, await magic(["pi", "catalog"]));
         updateStatus(ctx.model, ctx);
@@ -142,23 +173,42 @@ export default function magicmtn(pi) {
       if (ctx.model?.provider === "magicmtn") ctx.ui.notify("Could not load MagicMtn models. Check magic login, then use /magic inference.", "warning");
     }
   });
+  pi.on("before_agent_start", async (_event, ctx) => {
+    const account = await magic(["pi", "account"]);
+    const previous = mode;
+    await synchronizeMode(ctx, account);
+    if (previous === "local" && mode === "cloud" && account.signed_in) {
+      await refreshModels(ctx, await magic(["pi", "catalog"]));
+      updateStatus(ctx.model, ctx);
+    }
+  });
   pi.on("model_select", (event, ctx) => updateStatus(event.model || ctx.model, ctx));
   pi.registerCommand("magic", {
     description: "Open a MagicMtn pi workspace, or configure MagicMtn inference",
     handler: async (args, ctx) => {
       if (ctx.mode !== "tui") throw new Error("/magic requires pi's interactive terminal mode");
       await ctx.waitForIdle();
+      let account;
       const states = new Map();
       let action = args.trim();
+      if (!["", "default", "inference", "Inference only", "new", "New workspace", "New sandbox", "view", "open", "View sandboxes"].includes(action)) {
+        ctx.ui.notify("Usage: /magic [default|view|new|inference]", "info");
+        return;
+      }
       navigation: while (true) {
         try {
           let catalog;
+          account ??= await magic(["pi", "account"]);
+          await synchronizeMode(ctx, account);
+          if (mode === "local") {
+            await localMenu(action, ctx, magic, terminal);
+            return;
+          }
+          if (!account.signed_in) {
+            ctx.ui.notify("Run magic login in your terminal, then use /magic.", "info");
+            return;
+          }
           if (!action) {
-            const account = await magic(["pi", "account"]);
-            if (!account.signed_in) {
-              ctx.ui.notify("Run magic login in your terminal, then use /magic.", "info");
-              return;
-            }
             catalog = await magic(["pi", "catalog"]);
             const defaultModel = catalog && (catalog.defaults.inference_source === "pi" && ctx.model
               ? { display_name: `Pi: ${ctx.model.name || ctx.model.id}` }
@@ -267,7 +317,7 @@ export default function magicmtn(pi) {
             : ["open", "view", "View sandboxes"].includes(action) ? "resume"
             : action === "restart" ? "restart" : undefined;
           const expected = /cancelled|must be published and enabled|No default inference model/i.test(error.message);
-          if (operation && !error.reported && !expected) {
+          if (mode !== "local" && operation && !error.reported && !expected) {
             await magic(["pi", "report-error", "--operation", operation]).catch(() => {});
           }
           ctx.ui.notify(error.message, "error");

@@ -8,6 +8,7 @@ on:
       - 'Containerfile'
       - 'images/cli.Containerfile'
       - 'cli/**'
+      - 'interfaces/pi/**'
       - 'core/**'
       - 'local/**'
       - 'release/**'
@@ -28,6 +29,7 @@ on:
       - 'Containerfile'
       - 'images/cli.Containerfile'
       - 'cli/**'
+      - 'interfaces/pi/**'
       - 'core/**'
       - 'local/**'
       - 'release/**'
@@ -56,6 +58,11 @@ jobs:
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: npm ci --prefix interfaces/pi --ignore-scripts --no-audit --no-fund
+      - run: npm --prefix interfaces/pi test
       - run: rustup toolchain install 1.99.0 --profile minimal && rustup default 1.99.0
       - run: python3 -m unittest discover -s scripts -p test_cli_release.py
       - run: cargo test --locked -p magicmtn-cli -p magicmtn-local -p magicmtn-engine --lib --bins --tests -- --test-threads=1
