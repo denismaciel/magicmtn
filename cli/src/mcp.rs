@@ -112,7 +112,11 @@ async fn call(api: &Api, name: &str, args: &Value) -> Result<Value> {
     validate_args(api.local, name, args)?;
     ensure!(
         api.token.is_some(),
-        "Run `magic login` in your terminal, then reconnect the MCP server"
+        if api.local {
+            "restart the local server to refresh its private connection"
+        } else {
+            "Run `magic login` in your terminal, then reconnect the MCP server"
+        }
     );
     match name {
         "sandbox_list" => {

@@ -571,12 +571,16 @@ impl Api {
         if let Some(body) = body {
             request = request.json(&body);
         }
-        let response = request
-            .send()
-            .await
-            .context("could not reach MagicMtn server")?;
+        let response = request.send().await.context(if self.local {
+            "could not reach the local MagicMtn server; run `magic server start` and retry"
+        } else {
+            "could not reach MagicMtn server"
+        })?;
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED {
+            if self.local {
+                bail!("local server rejected its private credential; restart the local server and retry");
+            }
             bail!("not signed in or session expired; run `magic login` for this server");
         }
         if !status.is_success() {
@@ -1082,4 +1086,26 @@ fn local_server_accepts_explicit_network_names() {
     for name in ["", "bad network", "a/b", ";echo", &"x".repeat(129)] {
         assert!(Cli::try_parse_from(["magic", "server", "start", "--network", name]).is_err());
     }
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn local_requests_never_request_cloud_login() {
+    let app = axum::Router::new().route(
+        "/private",
+        axum::routing::get(|| async { axum::http::StatusCode::UNAUTHORIZED }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut api = Api::new(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+    api.local = true;
+    api.token = Some("local-credential".into());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let error = api
+        .request(reqwest::Method::GET, "private", None)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("private credential"), "{error}");
+    assert!(!error.contains("magic login"), "{error}");
+    server.abort();
 }
