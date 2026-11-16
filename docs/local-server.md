@@ -26,21 +26,34 @@ magic server start
 
 The server creates `~/.config/magicmtn/local/magicmtn.sqlite3` automatically and listens on `127.0.0.1:47821`. Keep this terminal open. No database service or separate SQLite installation is required.
 
-Local commands use a private credential saved in `~/.config/magicmtn/local/connection.json`. No MagicMtn account or login is required. Use `--local` to select this server; commands without it use MagicMtn Cloud unless you select another server with `--server-url` or `MAGICMTN_SERVER_URL`.
+Starting the server selects local mode for the CLI and Pi extension. Commands automatically use its saved address and private credential from `~/.config/magicmtn/local/connection.json`. No MagicMtn account, subscription, or login is required. Local mode stays selected after the server stops; stop the server and run `magic login` to switch to Cloud.
+
+A developer’s Cloud server is a separate application. Use `--server-url` to target it explicitly. Its login and saved credentials are independent of the single-user local server. Choosing a local sandbox provider while using Cloud changes workload placement and keeps the Cloud server selected.
 
 ## Create and use a sandbox
 
 In another terminal:
 
 ```sh
-magic --local sandbox new --image alpine:3.24.1 |
-  xargs -I {} magic --local sandbox exec {} -- /bin/sh -lc 'printf "hello from the sandbox\n"'
-magic --local sandbox list
+magic sandbox new --image alpine:3.24.1 |
+  xargs -I {} magic sandbox exec {} -- /bin/sh -lc 'printf "hello from the sandbox\n"'
+magic sandbox list
 ```
 
 The execution command prints the exit code, output, and timeout information. Apple Container sandboxes use an isolated network by default. Images are pulled by the host runtime when needed.
 
-Use an ID from `magic --local sandbox list` in `magic --local sandbox show <ID> --format json` to inspect a sandbox, or `magic --local sandbox ssh <ID>` to open an interactive shell. Type `exit` to return to your Mac. To use your ChatGPT subscription and MCP tools inside a sandbox, follow [Use Codex in a local sandbox](local-codex.md).
+Use an ID from `magic sandbox list` in `magic sandbox show <ID> --format json` to inspect a sandbox, or `magic sandbox ssh <ID>` to open an interactive shell. Type `exit` to return to your Mac. To use your ChatGPT subscription and MCP tools inside a sandbox, follow [Use Codex in a local sandbox](local-codex.md).
+
+## Use Pi with sandbox tools
+
+Install the Pi extension in local mode, then start Pi:
+
+```sh
+magic agents install pi
+pi
+```
+
+Pi stays on your computer and uses its own model and provider login. Select your model with `/model`. Use `/magic new` to create a sandbox and `/magic view` to manage existing sandboxes. Pi can create, inspect, execute commands in, read and write files in, and terminate sandboxes through the MagicMtn tools. Its built-in shell and file tools continue to work on your computer.
 
 ## Restart and clean up
 
@@ -49,7 +62,7 @@ Run `magic server stop` or press Ctrl+C in the server terminal, then run `magic 
 Delete a sandbox and its files when finished:
 
 ```sh
-magic --local sandbox terminate <ID> --yes
+magic sandbox terminate <ID> --yes
 ```
 
 Sandboxes have a 24-hour default lifetime. Set `magic server start --ttl-seconds SECONDS` to choose a lifetime between 1 second and 24 hours for new sandboxes. The lifecycle worker cleans up expired sandboxes while the server is running and resumes that work after restart.

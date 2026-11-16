@@ -20,7 +20,7 @@ Keep the server terminal open. The network setting gives new sandboxes internet 
 In another terminal:
 
 ```sh
-magic --local sandbox new --image node:24-alpine | xargs -o magic --local sandbox ssh
+magic sandbox new --image node:24-alpine | xargs -o magic sandbox ssh
 ```
 
 The pipe passes the new sandbox ID to `ssh`. The `-o` flag keeps the shell connected to your terminal.
@@ -42,10 +42,10 @@ cd /workspace
 codex
 ```
 
-Use `/quit` to leave Codex and `exit` to return to your Mac. Find the sandbox ID with `magic --local sandbox list`, then reopen it to keep using its files and login. Replace `<ID>` with that ID:
+Use `/quit` to leave Codex and `exit` to return to your Mac. Find the sandbox ID with `magic sandbox list`, then reopen it to keep using its files and login. Replace `<ID>` with that ID:
 
 ```sh
-magic --local sandbox ssh <ID>
+magic sandbox ssh <ID>
 ```
 
 ## Add MCP tools
@@ -65,7 +65,7 @@ Use your chosen MCP server's URL to connect other tools.
 Run `codex logout` inside the sandbox to sign out. To delete the sandbox and its files, run this on your Mac:
 
 ```sh
-magic --local sandbox terminate <ID> --yes
+magic sandbox terminate <ID> --yes
 ```
 
 Sandboxes have a 24-hour default lifetime. See [Run MagicMtn locally](local-server.md) for server settings and cleanup.
