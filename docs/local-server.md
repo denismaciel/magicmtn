@@ -33,15 +33,14 @@ Local commands use a private credential saved in `~/.config/magicmtn/local/conne
 In another terminal:
 
 ```sh
-sandbox_id=$(magic --local sandbox new --image alpine:3.24.1)
-magic --local sandbox exec "$sandbox_id" -- /bin/sh -lc 'printf "hello from the sandbox\n"'
-magic --local sandbox show "$sandbox_id" --format json
+magic --local sandbox new --image alpine:3.24.1 |
+  xargs -I {} magic --local sandbox exec {} -- /bin/sh -lc 'printf "hello from the sandbox\n"'
 magic --local sandbox list
 ```
 
 The execution command prints the exit code, output, and timeout information. Apple Container sandboxes use an isolated network by default. Images are pulled by the host runtime when needed.
 
-Open an interactive shell with `magic --local sandbox ssh "$sandbox_id"`. Type `exit` to return to your Mac. To use your ChatGPT subscription and MCP tools inside a sandbox, follow [Use Codex in a local sandbox](local-codex.md).
+Use an ID from `magic --local sandbox list` in `magic --local sandbox show <ID> --format json` to inspect a sandbox, or `magic --local sandbox ssh <ID>` to open an interactive shell. Type `exit` to return to your Mac. To use your ChatGPT subscription and MCP tools inside a sandbox, follow [Use Codex in a local sandbox](local-codex.md).
 
 ## Restart and clean up
 
@@ -50,7 +49,7 @@ Run `magic server stop` or press Ctrl+C in the server terminal, then run `magic 
 Delete a sandbox and its files when finished:
 
 ```sh
-magic --local sandbox terminate "$sandbox_id" --yes
+magic --local sandbox terminate <ID> --yes
 ```
 
 Sandboxes have a 24-hour default lifetime. Set `magic server start --ttl-seconds SECONDS` to choose a lifetime between 1 second and 24 hours for new sandboxes. The lifecycle worker cleans up expired sandboxes while the server is running and resumes that work after restart.
