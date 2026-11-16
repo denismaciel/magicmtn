@@ -55,6 +55,18 @@ impl Credentials {
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
+            // Pi workspace defaults share this directory. Only session files
+            // use an unprefixed SHA-256 digest as their name (see `path`).
+            let Some(stem) = path.file_stem().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if stem.len() != 64
+                || !stem
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                continue;
+            }
             let saved: Value =
                 serde_json::from_slice(&fs::read(&path)?).context("invalid saved CLI session")?;
             let mut api = Api::new(required_string(&saved, "server")?)?;
@@ -419,6 +431,15 @@ mod tests {
             directory: directory.path().join("cli"),
         };
         credentials.ensure_signed_out().await?;
+        fs::create_dir_all(&credentials.directory)?;
+        let defaults_path = credentials
+            .directory
+            .join(format!("defaults-{}.json", "a".repeat(64)));
+        let defaults = br#"{"inference_source":"magicmtn","model_id":"model"}"#;
+        fs::write(&defaults_path, defaults)?;
+        fs::write(credentials.directory.join("other.json"), b"invalid JSON")?;
+        credentials.ensure_signed_out().await?;
+        assert_eq!(fs::read(&defaults_path)?, defaults);
         credentials.save(&url, "valid", None)?;
         let error = credentials
             .ensure_signed_out()
@@ -429,6 +450,8 @@ mod tests {
         credentials.save(&url, "expired", None)?;
         credentials.ensure_signed_out().await?;
         server.abort();
+        assert!(credentials.ensure_signed_out().await.is_err());
+        fs::write(credentials.path(&url), b"{}")?;
         assert!(credentials.ensure_signed_out().await.is_err());
         Ok(())
     }
