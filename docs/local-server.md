@@ -24,7 +24,7 @@ Sign out of MagicMtn Cloud with `magic logout` before starting the local server.
 magic server start
 ```
 
-The server creates `~/.config/magicmtn/local/magicmtn.sqlite3` automatically and listens on `127.0.0.1:8080`. Keep this terminal open. No database service or separate SQLite installation is required.
+The server creates `~/.config/magicmtn/local/magicmtn.sqlite3` automatically and listens on `127.0.0.1:47821`. Keep this terminal open. No database service or separate SQLite installation is required.
 
 Local commands use a private credential saved in `~/.config/magicmtn/local/connection.json`. No MagicMtn account or login is required. Use `--local` to select this server; commands without it use MagicMtn Cloud unless you select another server with `--server-url` or `MAGICMTN_SERVER_URL`.
 

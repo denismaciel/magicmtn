@@ -19,7 +19,7 @@ fn magic(args: &[&str], server: Option<&str>) -> Output {
 
 #[test]
 fn server_override_is_available_in_every_build() {
-    let output = magic(&["--server-url", "http://127.0.0.1:8080", "whoami"], None);
+    let output = magic(&["--server-url", "http://127.0.0.1:47821", "whoami"], None);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("not signed in"));
 }
@@ -29,7 +29,7 @@ fn explicit_server_takes_precedence_over_environment() {
     let overridden = magic(&["whoami"], Some("not-a-url"));
     assert!(String::from_utf8_lossy(&overridden.stderr).contains("relative URL"));
     let explicit = magic(
-        &["--server-url", "http://127.0.0.1:8080", "whoami"],
+        &["--server-url", "http://127.0.0.1:47821", "whoami"],
         Some("not-a-url"),
     );
     assert!(String::from_utf8_lossy(&explicit.stderr).contains("not signed in"));
