@@ -22,12 +22,23 @@ jobs:
     if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/cli-release-checks.yml
 
-  linux:
+  canonical:
     needs: checks
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/canonical-image.yml
+
+  linux:
+    needs: [checks, canonical]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: canonical-image-lock
+          path: sdk/rust/magicmtn-sdk/src
       - run: sudo apt-get update && sudo apt-get install -y podman
       - run: sh scripts/package-cli-linux.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -66,6 +77,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          name: canonical-image-lock
+          path: sdk/rust/magicmtn-sdk/src
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
           name: cli-linux
           path: dist/bin
       - run: rustup toolchain install 1.99.0 --profile minimal && rustup default 1.99.0
@@ -80,6 +95,7 @@ jobs:
         run: |
           cp dist/bin/magic dist/bin/magic-darwin-arm64
           python3 scripts/publish-cli.py --skip-build --channel "$RELEASE_CHANNEL"
+          cp sdk/rust/magicmtn-sdk/src/canonical-image.json dist/public-release/canonical-image.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

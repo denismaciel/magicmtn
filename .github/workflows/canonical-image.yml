@@ -1,0 +1,76 @@
+name: Publish Canonical image
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-image-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: python3 -m unittest discover -s scripts -p test_canonical_image_release.py
+      - run: sudo apt-get update && sudo apt-get install -y podman
+      - name: Build and smoke-test native image
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          python3 scripts/build-canonical-image.py \
+            --platform "linux/$ARCHITECTURE" \
+            --tag "localhost/magicmtn/canonical:$GITHUB_SHA-$ARCHITECTURE" \
+            --output dist/canonical
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: canonical-${{ matrix.architecture }}
+          path: dist/canonical/
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: canonical-*
+          merge-multiple: true
+          path: dist/canonical
+      - run: sudo apt-get update && sudo apt-get install -y podman
+      - name: Authenticate to GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GH_TOKEN" | podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish images and verify anonymous access
+        run: |
+          python3 scripts/publish-canonical-image.py \
+            dist/canonical/canonical-arm64.oci.json \
+            dist/canonical/canonical-amd64.oci.json \
+            --tag "release-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: canonical-image-lock
+          path: sdk/rust/magicmtn-sdk/src/canonical-image.json
+          if-no-files-found: error
+          retention-days: 14
