@@ -12,6 +12,8 @@
 !runtime/github.py
 !runtime/gh.py
 !runtime/mcp.js
+!runtime/context.js
+!runtime/context.md
 !runtime/errors.js
 !runtime/error-worker.js
 !runtime/install.sh

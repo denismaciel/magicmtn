@@ -15,7 +15,7 @@ def run(*args, **kwargs):
 
 def runtime_sources(root):
     runtime = root / "runtime"
-    files = [*sorted(runtime.glob("*.py")), runtime / "requirements.txt", *sorted(runtime.glob("*.js")), runtime / "install.sh", *sorted((runtime / "harnesses").glob("*.py"))]
+    files = [*sorted(runtime.glob("*.py")), runtime / "requirements.txt", runtime / "context.md", *sorted(runtime.glob("*.js")), runtime / "install.sh", *sorted((runtime / "harnesses").glob("*.py"))]
     return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
 
 
@@ -25,15 +25,23 @@ def main():
     parser.add_argument("--tag", default="localhost/magicmtn/sandbox:0.1.0")
     parser.add_argument("--platform", help="For example linux/arm64 or linux/amd64; defaults to native")
     parser.add_argument("--emulated", action="store_true", help="Skip fd and ripgrep smoke checks under QEMU; validate those on a native runtime before rollout")
+    parser.add_argument("--skip-build", action="store_true", help="Smoke-test and export an existing local image")
     parser.add_argument("--output", type=Path, default=root / "dist/images")
     args = parser.parse_args()
     context = root / "images/canonical"
-    command = ["podman", "build", "--format", "oci", "--tag", args.tag, "--file", str(context / "Containerfile"),
+    command = ["podman", "build", "--layers", "--format", "oci", "--tag", args.tag, "--file", str(context / "Containerfile"),
                "--ignorefile", str(context / ".containerignore")]
     if args.platform:
         command += ["--platform", args.platform]
-    run(*command, str(root))
+    if not args.skip_build:
+        run(*command, str(root))
     platform_options = ["--platform", args.platform] if args.platform else []
+    # Compare files inside the image, including when reusing a local build.
+    sources = {str(Path(path).relative_to("runtime")): checksum for path, checksum in runtime_sources(root).items()}
+    verify = "import hashlib,json,pathlib;root=pathlib.Path('/opt/magicmtn/runtime');"
+    verify += f"expected={sources!r};"
+    verify += "assert all(hashlib.sha256((root/path).read_bytes()).hexdigest()==checksum for path,checksum in expected.items()), 'image runtime sources differ'"
+    run("podman", "run", *platform_options, "--rm", "--network", "none", args.tag, "python3", "-c", verify)
     expected_pi = json.loads((context / "package.json").read_text())["dependencies"]["@earendil-works/pi-coding-agent"]
     installed_pi = subprocess.check_output(["podman", "run", *platform_options, "--rm", "--network", "none",
                                             args.tag, "pi", "--version"], text=True).strip()
