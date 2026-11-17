@@ -47,7 +47,7 @@ fn tools(local: bool) -> Value {
     if local {
         let create = &mut definitions[1];
         create["description"] = json!("Create a sandbox on the local MagicMtn server. Keep its ID and inspect that ID after uncertain results before retrying. Pi and its model credentials stay on your computer.");
-        create["inputSchema"]["properties"]["image"] = json!({"type":"string", "description":"OCI image, for example python:3.13-alpine", "default":"python:3.13-alpine"});
+        create["inputSchema"]["properties"]["image"] = json!({"type":"string", "description":"Custom OCI image reference; defaults to MagicMtn Canonical"});
         definitions[3]["inputSchema"]["properties"]["cwd"]["default"] = json!("/");
         let create = &mut definitions[1];
         create["inputSchema"]["properties"]["provider"] =
@@ -136,20 +136,13 @@ async fn call(api: &Api, name: &str, args: &Value) -> Result<Value> {
                 None => uuid::Uuid::new_v4(),
             };
             let (route, body) = if api.local {
-                let image = args
-                    .get("image")
-                    .and_then(Value::as_str)
-                    .unwrap_or("python:3.13-alpine");
-                let provider = args.get("provider").and_then(Value::as_str).unwrap_or(
-                    if cfg!(target_os = "macos") {
-                        "apple-container"
-                    } else {
-                        "firecracker"
-                    },
-                );
                 (
                     "v1/sandboxes",
-                    json!({"template":format!("image:{image}"), "provider":provider, "idempotency_key":key}),
+                    crate::images::creation_body(
+                        args.get("image").and_then(Value::as_str),
+                        args.get("provider").and_then(Value::as_str),
+                        key,
+                    )?,
                 )
             } else {
                 (

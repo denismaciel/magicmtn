@@ -8,6 +8,7 @@ exports_files(["Cargo.toml"])
 rust_library(
     name = "sdk",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["src/canonical-image.json"],
     crate_name = "magicmtn_sdk",
     edition = "2021",
     proc_macro_deps = all_crate_deps(proc_macro = True),

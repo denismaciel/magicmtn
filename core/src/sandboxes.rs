@@ -58,6 +58,9 @@ pub trait SandboxPolicy: Send + Sync {
         ))
     }
     fn ttl_seconds(&self, _provider: &str) -> Result<u32, ApiError>;
+    fn default_template(&self) -> Option<String> {
+        None
+    }
     fn preferred_connection(&self, _provider: &str) -> Option<String> {
         None
     }
@@ -94,6 +97,11 @@ pub struct LocalPolicy {
     pub ttl_seconds: u32,
 }
 impl SandboxPolicy for LocalPolicy {
+    fn default_template(&self) -> Option<String> {
+        let platform = magicmtn_sdk::image_registry::local_platform().ok()?;
+        let image = magicmtn_sdk::image_registry::canonical(platform).ok()?;
+        Some(format!("image:{}", image.reference()))
+    }
     fn admit_local(&self) -> Result<(), ApiError> {
         Ok(())
     }
@@ -190,6 +198,7 @@ async fn show(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Create {
+    #[serde(default)]
     pub template: String,
     pub provider: String,
     pub connection_id: Option<Uuid>,
@@ -211,12 +220,21 @@ async fn create(
 // other sandbox. Their immutable launch selections are saved before dispatch.
 pub async fn create_record(
     s: impl Into<ServiceState>,
-    body: Create,
+    mut body: Create,
     workspace: Option<Value>,
     policy: &dyn SandboxPolicy,
 ) -> Result<Value, (StatusCode, String)> {
     let s = s.into();
     let id = body.idempotency_key.unwrap_or_else(Uuid::new_v4);
+    if body.template.is_empty() {
+        if let Some(default) = policy.default_template() {
+            // A retry retains its original image across upgrades to the default.
+            body.template = match s.store.get(id).await.map_err(failed)? {
+                Some(saved) => saved["template"].as_str().unwrap_or("").to_owned(),
+                None => default,
+            };
+        }
+    }
     let specification = image_specification(&body.template, id)?;
     let snapshot_key = match workspace.as_ref().and_then(|w| w["kind"].as_str()) {
         Some("workload") => "_magicmtn_workload",

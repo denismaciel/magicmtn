@@ -20,7 +20,7 @@ Keep the server terminal open. The network setting gives new sandboxes internet 
 In another terminal:
 
 ```sh
-magic sandbox new --image node:24-alpine | xargs -o magic sandbox ssh
+magic sandbox new | xargs -o magic sandbox ssh
 ```
 
 The pipe passes the new sandbox ID to `ssh`. The `-o` flag keeps the shell connected to your terminal.
@@ -28,7 +28,6 @@ The pipe passes the new sandbox ID to `ssh`. The `-o` flag keeps the shell conne
 Inside the sandbox:
 
 ```sh
-npm install --global @openai/codex@0.169.0
 codex login --device-auth
 ```
 

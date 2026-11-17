@@ -651,3 +651,51 @@ async fn explicit_configuration_is_frozen_per_sandbox() -> anyhow::Result<()> {
     db.pool.close().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn canonical_default_is_frozen_before_dispatch_and_survives_restart() -> anyhow::Result<()> {
+    let directory = tempfile::tempdir()?;
+    let registry = provider(directory.path())?;
+    let path = directory.path().join("canonical.sqlite3");
+    let database = Database::open(&path).await?;
+    database.bootstrap(&registry).await?;
+    let app = router(
+        Store::Sqlite(database.clone()),
+        registry.clone(),
+        TOKEN.into(),
+        3600,
+    );
+    let id = Uuid::new_v4();
+    let body = json!({"provider": "test-local", "idempotency_key": id});
+    let (status, record) = request(&app, "POST", "/v1/sandboxes", body.clone()).await?;
+    assert_eq!(status, StatusCode::OK, "{record}");
+    let platform = magicmtn_sdk::image_registry::local_platform()?;
+    let expected = format!(
+        "image:{}",
+        magicmtn_sdk::image_registry::canonical(platform)?.reference()
+    );
+    assert_eq!(record["template"], expected);
+    drop(app);
+    database.pool.close().await;
+    let database = Database::open(&path).await?;
+    database.bootstrap(&registry).await?;
+    let app = router(
+        Store::Sqlite(database),
+        registry.clone(),
+        TOKEN.into(),
+        3600,
+    );
+    let (status, replayed) = request(&app, "POST", "/v1/sandboxes", body).await?;
+    assert_eq!(status, StatusCode::OK, "{replayed}");
+    assert_eq!(replayed["template"], expected);
+    assert_eq!(replayed["id"], record["id"]);
+    assert_eq!(
+        std::fs::read_to_string(directory.path().join("events"))?
+            .lines()
+            .filter(|line| *line == "sandbox_create")
+            .count(),
+        1
+    );
+    registry.shutdown().await;
+    Ok(())
+}

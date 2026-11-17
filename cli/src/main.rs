@@ -13,6 +13,7 @@ mod authentication;
 mod completions;
 mod configuration;
 mod execution;
+mod images;
 mod mcp;
 mod mode;
 mod pi;
@@ -109,9 +110,16 @@ fn cloud_is_default_and_server_selection_is_explicit() {
 #[derive(Subcommand)]
 enum Commands {
     /// Run the single-user MagicMtn server on this machine
+    #[command(display_order = 8)]
     Server {
         #[command(subcommand)]
         command: ServerCommands,
+    },
+    /// Manage sandbox images
+    #[command(arg_required_else_help = true, display_order = 9)]
+    Images {
+        #[command(subcommand)]
+        command: ImageCommands,
     },
     /// Expose MagicMtn sandbox tools to MCP clients
     #[command(display_order = 5)]
@@ -183,6 +191,12 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
+enum ImageCommands {
+    /// List sandbox images
+    List,
+}
+
+#[derive(Subcommand)]
 enum ServerCommands {
     /// Stop the local server after active requests finish
     Stop,
@@ -235,11 +249,11 @@ enum SandboxCommands {
         /// Use an explicitly connected Pi inference profile
         #[arg(long, conflicts_with = "image")]
         pi_connection: Option<uuid::Uuid>,
-        #[arg(long, requires = "image")]
+        #[arg(long)]
         provider: Option<String>,
         #[arg(long, requires = "image")]
         connection: Option<String>,
-        #[arg(long, requires = "image")]
+        #[arg(long)]
         notes: Option<String>,
     },
     /// Execute a bounded command in a sandbox
@@ -741,6 +755,11 @@ async fn run(mut cli: Cli) -> Result<()> {
         update::run().await?;
         return Ok(());
     }
+    if let Commands::Images { command } = &command {
+        return match command {
+            ImageCommands::List => images::list(),
+        };
+    }
     if let Commands::Provider { command } = &command {
         return match command {
             ProviderCommands::Install { name, file } => match (name.as_deref(), file.as_deref()) {
@@ -823,25 +842,36 @@ async fn run(mut cli: Cli) -> Result<()> {
             notes,
         } => {
             anyhow::ensure!(
-                !local || image.is_some(),
-                "select a local sandbox image with --image (for example, ubuntu:24.04)"
+                !local || (model.is_none() && pi_connection.is_none()),
+                "local sandboxes use the agent's own inference; omit --model and --pi-connection"
+            );
+            anyhow::ensure!(
+                local || image.is_some() || (provider.is_none() && notes.is_none()),
+                "--provider and --notes require --image on the Cloud server"
             );
             let key = uuid::Uuid::new_v4();
-            let (route, body) = match image {
-                Some(image) => (
-                    "v1/sandboxes",
-                    json!({
-                        "template": format!("image:{image}"),
-                        "provider": provider.unwrap_or_else(|| "apple-container".into()),
-                        "connection_id": connection,
-                        "idempotency_key": key,
-                        "notes": notes,
-                    }),
-                ),
-                None => (
-                    "v1/sandboxes/managed",
-                    pi::managed_creation_body(&api, model, pi_connection, key).await?,
-                ),
+            let (route, body) = if local {
+                let mut body = images::creation_body(image.as_deref(), provider.as_deref(), key)?;
+                body["connection_id"] = json!(connection);
+                body["notes"] = json!(notes);
+                ("v1/sandboxes", body)
+            } else {
+                match image {
+                    Some(image) => (
+                        "v1/sandboxes",
+                        json!({
+                            "template": format!("image:{image}"),
+                            "provider": provider.unwrap_or_else(|| "apple-container".into()),
+                            "connection_id": connection,
+                            "idempotency_key": key,
+                            "notes": notes,
+                        }),
+                    ),
+                    None => (
+                        "v1/sandboxes/managed",
+                        pi::managed_creation_body(&api, model, pi_connection, key).await?,
+                    ),
+                }
             };
             let result = api.request(Method::POST, route, Some(body)).await?;
             let id = text(&result, "id");

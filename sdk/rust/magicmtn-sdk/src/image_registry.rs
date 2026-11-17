@@ -25,6 +25,48 @@ pub struct Image {
     pub digest: String,
 }
 
+impl Image {
+    /// A runnable OCI reference that never follows a mutable tag.
+    pub fn reference(&self) -> String {
+        format!("{}@{}", self.repository, self.digest)
+    }
+}
+
+/// The Canonical image release bundled with this version of MagicMtn.
+/// CLI releases embed a new lock only after verifying anonymous registry pulls.
+pub fn canonical(platform: &str) -> anyhow::Result<Image> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Release {
+        repository: String,
+        manifests: std::collections::BTreeMap<String, String>,
+    }
+    let release: Release = serde_json::from_str(include_str!("canonical-image.json"))?;
+    let digest = release
+        .manifests
+        .get(platform)
+        .ok_or_else(|| anyhow::anyhow!("MagicMtn Canonical has no image for {platform}"))?;
+    anyhow::ensure!(
+        digest.strip_prefix("sha256:").is_some_and(
+            |hash| hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        ),
+        "invalid Canonical image digest"
+    );
+    Ok(Image {
+        repository: release.repository,
+        digest: digest.clone(),
+    })
+}
+
+/// OCI platform used by sandbox images on this host.
+pub fn local_platform() -> anyhow::Result<&'static str> {
+    match std::env::consts::ARCH {
+        "aarch64" => Ok("linux/arm64"),
+        "x86_64" => Ok("linux/amd64"),
+        _ => anyhow::bail!("unsupported sandbox image architecture"),
+    }
+}
+
 /// Store and retrieve built container images through a provider-owned registry.
 pub trait ImageRegistryBackend: Send + Sync {
     /// List selectable repository/tag or repository/digest references.
