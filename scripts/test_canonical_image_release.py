@@ -70,6 +70,24 @@ class CanonicalReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 publisher.inspect_archive(path)
 
+    def test_release_verifies_committed_pins_without_modifying_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'lock.json'
+            value = {'repository': publisher.REPOSITORY, 'manifests': {
+                'linux/arm64': 'sha256:' + '1' * 64, 'linux/amd64': 'sha256:' + '2' * 64}}
+            path.write_text(json.dumps(value))
+            original = path.read_bytes()
+            with mock.patch.object(publisher, 'anonymous_manifest') as verify:
+                publisher.verify_lock(path)
+                self.assertEqual(verify.call_count, 2)
+            self.assertEqual(path.read_bytes(), original)
+            value['manifests']['linux/arm64'] = 'latest'
+            path.write_text(json.dumps(value))
+            with mock.patch.object(publisher, 'anonymous_manifest') as verify:
+                with self.assertRaises(ValueError):
+                    publisher.verify_lock(path)
+                verify.assert_not_called()
+
     def test_failed_public_verification_preserves_previous_lock(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -89,6 +89,19 @@ def anonymous_manifest(digest):
         raise ValueError("public registry manifest digest differs")
 
 
+def verify_lock(path=LOCK):
+    value = json.loads(path.read_text())
+    if (set(value) != {"repository", "manifests"} or value["repository"] != REPOSITORY
+            or set(value["manifests"]) != {"linux/arm64", "linux/amd64"}):
+        raise ValueError("invalid Canonical image lock")
+    digests = list(value["manifests"].values())
+    if any(not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest) for digest in digests):
+        raise ValueError("invalid Canonical image lock digest")
+    for digest in digests:
+        anonymous_manifest(digest)
+    print("Verified the committed Canonical images are publicly available.")
+
+
 def publish(metadata_paths, tag, output):
     # Validate every artifact before publishing any of them.
     images = [inspect_archive(path) for path in metadata_paths]
@@ -130,10 +143,18 @@ def publish(metadata_paths, tag, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("metadata", nargs="+", type=Path)
-    parser.add_argument("--tag", required=True)
+    parser.add_argument("metadata", nargs="*", type=Path)
+    parser.add_argument("--tag")
+    parser.add_argument("--verify-lock", action="store_true")
     parser.add_argument("--output", type=Path, default=LOCK)
     args = parser.parse_args()
+    if args.verify_lock:
+        if args.metadata or args.tag:
+            parser.error("--verify-lock cannot be combined with publication arguments")
+        verify_lock()
+        return
+    if not args.metadata or not args.tag:
+        parser.error("publication requires metadata and --tag")
     if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}", args.tag):
         parser.error("invalid release tag")
     publish(args.metadata, args.tag, args.output)

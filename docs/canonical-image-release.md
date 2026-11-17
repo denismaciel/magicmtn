@@ -4,7 +4,9 @@ Canonical is built from `images/canonical/Containerfile` and published to the pu
 
 ## Release with the CLI
 
-Run the **Publish CLI binaries** workflow on `main`. It calls **Publish Canonical image**, builds and smoke-tests Linux ARM64 and AMD64 images on native runners, publishes them to GHCR, and verifies anonymous access to their manifests. The publication produces a `canonical-image-lock` artifact. Both the Mac and Linux CLI build jobs download that same lock before compiling, so every binary in a release embeds the same image selection.
+Run **Publish Canonical image** on `main` when updating the image. It builds and smoke-tests Linux ARM64 and AMD64 images on native runners, publishes them to GHCR, verifies anonymous access, and produces a `canonical-image-lock` artifact. Commit that artifact as `sdk/rust/magicmtn-sdk/src/canonical-image.json`.
+
+Run **Publish CLI binaries** on `main` to release the CLI. It verifies anonymous access to both committed image digests before building. Every CLI binary embeds the same committed lock, keeping release source clean and image selection consistent with Cloud’s pinned source revision.
 
 The lock is `sdk/rust/magicmtn-sdk/src/canonical-image.json`. It maps OCI platforms to immutable manifest digests. The container runtime selects and stores the host's image locally. Provider installation pulls the pinned ARM64 image into Apple Container. Local CLI and MCP creation use the server's default, which is frozen in the sandbox record before the provider launches it. Replaying an existing creation intent retains its saved digest.
 
@@ -33,7 +35,7 @@ python3 scripts/publish-canonical-image.py \
   --tag release-VERSION
 ```
 
-The publisher validates the archives and source hashes before uploading. It writes the lock atomically after both platform images and their index pass anonymous manifest verification. Commit the resulting lock to select that image release for development builds.
+The publisher validates the archives and source hashes before uploading. It writes the lock atomically after both platform images and their index pass anonymous manifest verification. Commit the resulting lock to select that image release for development, CI, and production CLI builds.
 
 ## Custom images and providers
 
