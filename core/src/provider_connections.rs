@@ -146,6 +146,11 @@ pub fn configuration_keys(provider: &str) -> &'static [&'static str] {
         ],
         "modal" => &["MAGICMTN_MODAL_APP", "MAGICMTN_MODAL_PREPARED_IMAGES"],
         "e2b" => &["MAGICMTN_E2B_TEMPLATES"],
+        "daytona" => &[
+            "MAGICMTN_DAYTONA_SNAPSHOTS",
+            "DAYTONA_TARGET",
+            "MAGICMTN_DAYTONA_USER",
+        ],
         "boat" => &[
             "MAGICMTN_BOAT_SNAPSHOTS",
             "MAGICMTN_BOAT_INFERENCE_SANDBOX",
@@ -896,6 +901,7 @@ fn legacy_credential_keys(provider: &str) -> &'static [&'static str] {
         "baseten" => &["BASETEN_API_KEY"],
         "modal" => &["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"],
         "e2b" => &["E2B_API_KEY"],
+        "daytona" => &["DAYTONA_API_KEY"],
         "boat" => &["BOAT_API_KEY"],
         "exe" => &["MAGICMTN_EXE_API_TOKEN"],
         "openai-compatible" => &["MAGICMTN_OPENAI_API_KEY", "OPENAI_API_KEY"],
@@ -1246,6 +1252,11 @@ mod tests {
         }
         assert!(configuration_keys("modal").contains(&"MAGICMTN_MODAL_PREPARED_IMAGES"));
         assert!(configuration_keys("e2b").contains(&"MAGICMTN_E2B_TEMPLATES"));
+        assert!(configuration_keys("daytona").contains(&"MAGICMTN_DAYTONA_SNAPSHOTS"));
+        assert_eq!(legacy_credential_keys("daytona"), &["DAYTONA_API_KEY"]);
+        for key in ["DAYTONA_API_KEY", "DAYTONA_API_URL"] {
+            assert!(!configuration_keys("daytona").contains(&key));
+        }
         assert!(safe_environment_key("MAGICMTN_MODAL_PREPARED_IMAGES"));
         assert!(safe_environment_key("FIREWORKS_API_KEY"));
         assert!(!configuration_keys("fireworks").contains(&"FIREWORKS_API_KEY"));
