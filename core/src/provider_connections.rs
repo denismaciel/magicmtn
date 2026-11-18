@@ -146,6 +146,7 @@ pub fn configuration_keys(provider: &str) -> &'static [&'static str] {
         ],
         "modal" => &["MAGICMTN_MODAL_APP", "MAGICMTN_MODAL_PREPARED_IMAGES"],
         "e2b" => &["MAGICMTN_E2B_TEMPLATES"],
+        "together" => &["MAGICMTN_TOGETHER_SNAPSHOTS"],
         "daytona" => &[
             "MAGICMTN_DAYTONA_SNAPSHOTS",
             "DAYTONA_TARGET",
@@ -828,7 +829,12 @@ pub fn environment(binding: &Binding) -> anyhow::Result<ProcessEnvironment> {
                     values.insert(key.into(), value);
                 }
             }
-            for key in ["MAGICMTN_AWS_PYTHON", "MAGICMTN_MODAL_PYTHON", "PYTHONPATH"] {
+            for key in [
+                "MAGICMTN_AWS_PYTHON",
+                "MAGICMTN_MODAL_PYTHON",
+                "MAGICMTN_TOGETHER_PYTHON",
+                "PYTHONPATH",
+            ] {
                 if let Ok(value) = std::env::var(key) {
                     values.insert(key.into(), value);
                 }
@@ -901,6 +907,7 @@ fn legacy_credential_keys(provider: &str) -> &'static [&'static str] {
         "baseten" => &["BASETEN_API_KEY"],
         "modal" => &["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"],
         "e2b" => &["E2B_API_KEY"],
+        "together" => &["TOGETHER_API_KEY"],
         "daytona" => &["DAYTONA_API_KEY"],
         "boat" => &["BOAT_API_KEY"],
         "exe" => &["MAGICMTN_EXE_API_TOKEN"],
@@ -1252,6 +1259,11 @@ mod tests {
         }
         assert!(configuration_keys("modal").contains(&"MAGICMTN_MODAL_PREPARED_IMAGES"));
         assert!(configuration_keys("e2b").contains(&"MAGICMTN_E2B_TEMPLATES"));
+        assert_eq!(
+            configuration_keys("together"),
+            &["MAGICMTN_TOGETHER_SNAPSHOTS"]
+        );
+        assert_eq!(legacy_credential_keys("together"), &["TOGETHER_API_KEY"]);
         assert!(configuration_keys("daytona").contains(&"MAGICMTN_DAYTONA_SNAPSHOTS"));
         assert_eq!(legacy_credential_keys("daytona"), &["DAYTONA_API_KEY"]);
         for key in ["DAYTONA_API_KEY", "DAYTONA_API_URL"] {
