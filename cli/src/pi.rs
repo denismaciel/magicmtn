@@ -197,7 +197,7 @@ pub async fn run(api: &Api, command: Commands) -> Result<()> {
             api.request(
                 Method::POST,
                 "v1/pi/workspaces",
-                Some(crate::configuration::creation_body(api, json!({"model_id":model,"pi_connection_id":pi_connection,"idempotency_key":key}))?),
+                Some(crate::configuration::creation_body(json!({"model_id":model,"pi_connection_id":pi_connection,"idempotency_key":key}))?),
             )
             .await?
         }
@@ -358,7 +358,7 @@ pub(crate) async fn managed_creation_body(
             body["model_id"] = json!(model);
         }
     }
-    crate::configuration::creation_body(api, body)
+    crate::configuration::creation_body(body)
 }
 struct Terminal;
 impl Terminal {

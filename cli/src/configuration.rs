@@ -1,5 +1,4 @@
 //! User preferences are deliberately separate from server-scoped runner registration.
-use crate::Api;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -7,18 +6,19 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use uuid::Uuid;
 
 #[derive(Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 struct Config {
-    local_sandbox: bool,
+    // Accepted for compatibility; server selection is owned by mode::Selection.
+    #[serde(rename = "local-sandbox")]
+    _local_sandbox: bool,
     error_reporting: bool,
 }
 impl Default for Config {
     fn default() -> Self {
         Self {
-            local_sandbox: false,
+            _local_sandbox: false,
             error_reporting: true,
         }
     }
@@ -44,27 +44,13 @@ fn read(path: &Path) -> Result<Config> {
         Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
     }
 }
-fn provider() -> Result<&'static str> {
-    match std::env::consts::OS {
-        "macos" => Ok("apple-container"),
-        "linux" => Ok("firecracker"),
-        _ => anyhow::bail!("local sandboxes require macOS or Linux"),
-    }
+pub(crate) fn creation_body(body: Value) -> Result<Value> {
+    creation_body_at(&directory()?, body)
 }
-pub(crate) fn creation_body(api: &Api, mut body: Value) -> Result<Value> {
-    let root = directory()?;
+
+fn creation_body_at(root: &Path, mut body: Value) -> Result<Value> {
     let config = read(&root.join("config"))?;
     body["error_reporting"] = json!(config.error_reporting);
-    if config.local_sandbox {
-        provider()?;
-        let bindings: Value = serde_json::from_slice(
-            &fs::read(root.join("local-connections.json"))
-                .context("saved local provider connections are unavailable")?,
-        )?;
-        let id: Uuid = serde_json::from_value(bindings[api.base.as_str()].clone())
-            .context("no local runner connection registered for this server")?;
-        body["local_connection_id"] = json!(id);
-    }
     Ok(body)
 }
 #[cfg(test)]
@@ -89,17 +75,38 @@ mod tests {
     }
 
     #[test]
+    fn legacy_local_preference_does_not_route_cloud_creation_to_a_local_runner() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(
+            root.path().join("config"),
+            "local-sandbox = true\nerror-reporting = false",
+        )
+        .unwrap();
+        let body = json!({"model_id": "model", "idempotency_key": "request"});
+        let expected =
+            json!({"model_id": "model", "idempotency_key": "request", "error_reporting": false});
+        assert_eq!(
+            creation_body_at(root.path(), body.clone()).unwrap(),
+            expected
+        );
+
+        // Even an old connection file must not override the selected Cloud mode.
+        fs::write(root.path().join("local-connections.json"), "invalid JSON").unwrap();
+        assert_eq!(creation_body_at(root.path(), body).unwrap(), expected);
+    }
+
+    #[test]
     fn config_is_opt_in_and_strict() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("config");
-        assert!(!read(&path).unwrap().local_sandbox);
+        assert!(!read(&path).unwrap()._local_sandbox);
         for (text, expected) in [
             ("", false),
             ("local-sandbox = false", false),
             ("local-sandbox = true", true),
         ] {
             fs::write(&path, text).unwrap();
-            assert_eq!(read(&path).unwrap().local_sandbox, expected);
+            assert_eq!(read(&path).unwrap()._local_sandbox, expected);
         }
         for text in [
             "local-sandbox: true",
