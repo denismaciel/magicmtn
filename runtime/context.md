@@ -8,9 +8,7 @@ Help the user do their work using this environment.
 
 - Commands and file edits operate inside this sandbox. Use your current working
   directory and the project's instructions as the source of truth for the task.
-- `/workspace` is the initial workspace. Clone repositories or transfer files
-  into the sandbox to work on a project. Local files change through an explicit
-  transfer or repository workflow.
+- Clone repositories or transfer files into the sandbox's initial working directory. Local files change through an explicit transfer or repository workflow.
 - The user connects through `magic pi attach` or `/magic` in their local Pi.
   Ctrl+] disconnects their terminal while the sandbox and managed agent continue
   running. They can reconnect to the same workspace and conversation.

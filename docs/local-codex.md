@@ -36,8 +36,6 @@ Open the link Codex prints in your Mac's browser and enter the code. Enable devi
 Start working:
 
 ```sh
-mkdir -p /workspace
-cd /workspace
 codex
 ```
 

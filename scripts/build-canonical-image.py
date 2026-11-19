@@ -53,7 +53,9 @@ def main():
     # No provider credentials or network access are needed for these checks.
     smoke = r'''
 test "$(id -u)" = 10001
-test "$PWD" = /workspace
+test "$PWD" = /computer
+test "$(readlink /workspace)" = /computer
+test "$(cd /workspace && pwd -P)" = /computer
 test -w "$HOME"
 python -c 'import ssl, sqlite3, venv; print("Python", __import__("sys").version.split()[0])'
 python -m pip --version
@@ -77,14 +79,15 @@ test -x /usr/local/bin/magicmtn-git-credential
 /opt/magicmtn/venv/bin/python3 -c 'import websockets.sync.client; import sys; sys.path.insert(0, "/opt/magicmtn/runtime"); import agent; from harnesses.pi import PiHarness'
 pi --help > /tmp/pi-help.txt
 grep -q -- '--mode' /tmp/pi-help.txt
-git init --quiet /workspace/smoke-repo
-printf 'sandbox smoke test\n' > /workspace/smoke-repo/test.txt
-rg 'sandbox smoke test' /workspace/smoke-repo
-python -m venv /workspace/project-venv
-/workspace/project-venv/bin/python -c 'print("Project virtualenv works")'
+git init --quiet smoke-repo
+printf 'sandbox smoke test\n' > smoke-repo/test.txt
+rg 'sandbox smoke test' smoke-repo
+test -f /workspace/smoke-repo/test.txt
+python -m venv project-venv
+project-venv/bin/python -c 'print("Project virtualenv works")'
 '''
     if args.emulated:
-        smoke = smoke.replace("fd --version\n", "").replace("rg 'sandbox smoke test' /workspace/smoke-repo\n", "")
+        smoke = smoke.replace("fd --version\n", "").replace("rg 'sandbox smoke test' smoke-repo\n", "")
         smoke = smoke.replace("opencode --version\n", "")
     run("podman", "run", *platform_options, "--rm", "--network", "none", "--cap-drop", "all",
         "--security-opt", "no-new-privileges", args.tag, "bash", "-euc", smoke)
@@ -110,6 +113,7 @@ python -m venv /workspace/project-venv
         run("podman", "run", *platform_options, "--detach", "--name", name, "--network", "none", args.tag,
             stdout=subprocess.DEVNULL)
         run("podman", "exec", name, "pi", "--version")
+        run("podman", "exec", "--workdir", "/workspace", name, "sh", "-ec", 'test "$(pwd -P)" = /computer && test -w .')
         run("podman", "stop", "--time", "3", name, stdout=subprocess.DEVNULL)
         stopped = json.loads(subprocess.check_output(["podman", "inspect", name]))[0]
         assert stopped["State"]["ExitCode"] != 137, "sandbox needed SIGKILL to stop"

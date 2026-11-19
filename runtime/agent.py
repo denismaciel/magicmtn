@@ -87,9 +87,11 @@ class Supervisor:
             # Avoid Python preexec_fn after threads have started. The tiny
             # session-leader wrapper acquires the controlling PTY before exec.
             wrapper = [sys.executable, "-c", "import fcntl,os,sys,termios;fcntl.ioctl(0,termios.TIOCSCTTY,0);os.execvp(sys.argv[1],sys.argv[1:])"]
+            workspace = self.config.get("workspace", os.path.realpath("/workspace"))
             self.child = subprocess.Popen(wrapper + command, stdin=slave, stdout=slave, stderr=slave,
-                                          cwd=self.config.get("workspace", "/workspace"),
-                                          env=self.environment(), start_new_session=True, close_fds=True)
+                                          cwd=workspace,
+                                          env=dict(self.environment(), PWD=os.path.abspath(workspace)),
+                                          start_new_session=True, close_fds=True)
             os.close(slave)
             os.set_blocking(master, False)
             self.master = master

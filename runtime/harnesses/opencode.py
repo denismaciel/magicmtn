@@ -1,5 +1,6 @@
 """Configure the OpenCode CLI and persist its managed session on the sandbox disk."""
 import json
+import os
 import pathlib
 
 
@@ -17,7 +18,7 @@ class OpenCodeHarness:
         self.sessions = self.directory / "sessions"
         self.sessions.mkdir(mode=0o700, exist_ok=True)
         self.session_id = "ses_" + session_id.replace("-", "")
-        self.workspace = config.get("workspace", "/workspace")
+        self.workspace = config.get("workspace") or os.path.realpath("/workspace")
         self.workspace_info = config.get("workspace_info")
         self.config_home = self.directory / "config"
         global_config = self.config_home / "opencode"

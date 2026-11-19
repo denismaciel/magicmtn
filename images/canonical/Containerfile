@@ -16,14 +16,16 @@ LABEL org.opencontainers.image.source="https://github.com/UseMagicMtn/magicmtn" 
       org.opencontainers.image.title="MagicMtn canonical sandbox" \
       org.opencontainers.image.description="Alpine sandbox with Python, Pi, Codex, OpenCode, Jujutsu, and GitHub CLI" \
       org.opencontainers.image.version="0.1.0"
+# Existing provider commands use /workspace as their guest working directory.
 RUN apk upgrade --no-cache \
     && apk add --no-cache bash ca-certificates curl fd git github-cli jujutsu python3 py3-pip ripgrep tini \
     && npm install --global npm@11.21.3 --ignore-scripts --no-audit --no-fund \
     && addgroup -g 10001 sandbox \
     && adduser -D -u 10001 -G sandbox -s /bin/bash sandbox \
-    && mkdir -p /workspace /opt/venv \
+    && mkdir -p /computer /opt/venv \
+    && ln -s /computer /workspace \
     && python3 -m venv /opt/venv \
-    && chown -R sandbox:sandbox /workspace /opt/venv
+    && chown -R sandbox:sandbox /computer /opt/venv
 COPY runtime /opt/magicmtn/runtime
 COPY --from=pi /opt/pi /opt/pi
 RUN ln -s /opt/pi/node_modules/.bin/pi /usr/local/bin/pi \
@@ -38,7 +40,7 @@ ENV HOME=/home/sandbox \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 USER 10001:10001
-WORKDIR /workspace
+WORKDIR /computer
 ENTRYPOINT ["/sbin/tini", "--"]
 # Providers create the sandbox once and execute commands (including pi) inside it.
 CMD ["sleep", "infinity"]
