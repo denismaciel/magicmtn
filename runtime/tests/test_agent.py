@@ -231,8 +231,6 @@ class SupervisorTests(unittest.TestCase):
         self.supervisor.configure()
         command = self.supervisor.harness.command
         self.supervisor.harness.command = lambda: [os.environ["MAGICMTN_TEST_PI"], *command()[1:], "--offline", "--no-context-files", "--no-extensions"]
-        # Retain adapter command refresh on explicit restart.
-        self.supervisor.command = ["pi"]
         self.supervisor.request = agent.Supervisor.request.__get__(self.supervisor)
         self.thread = threading.Thread(target=self.supervisor.run)
         self.thread.start()
