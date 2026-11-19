@@ -4,17 +4,19 @@ WORKDIR /opt/pi
 COPY images/canonical/package.json images/canonical/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
     && case "$(uname -m)" in \
-        aarch64) package=cli-linux-arm64-musl ;; \
-        x86_64) package=cli-linux-x64-baseline-musl ;; \
+        aarch64) package=cli-linux-arm64-musl; claude_arch=arm64 ;; \
+        x86_64) package=cli-linux-x64-baseline-musl; claude_arch=x64 ;; \
         *) exit 1 ;; \
     esac \
     && install -m 0755 "node_modules/@opencode/$package/bin/opencode" node_modules/@opencode/cli/bin/opencode.exe \
+    && test -x "node_modules/@anthropic-ai/claude-code-linux-$claude_arch-musl/claude" \
+    && ln -sf "../@anthropic-ai/claude-code-linux-$claude_arch-musl/claude" node_modules/.bin/claude \
     && rm -rf node_modules/@opencode/cli-linux-*
 
 FROM docker.io/library/node:24.22.3-alpine3.24@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 LABEL org.opencontainers.image.source="https://github.com/UseMagicMtn/magicmtn" \
       org.opencontainers.image.title="MagicMtn canonical sandbox" \
-      org.opencontainers.image.description="Alpine sandbox with Python, Pi, Codex, OpenCode, Jujutsu, and GitHub CLI" \
+      org.opencontainers.image.description="Alpine sandbox with Python, Pi, Codex, Claude Code, OpenCode, Jujutsu, and GitHub CLI" \
       org.opencontainers.image.version="0.1.0"
 # Existing provider commands use /workspace as their guest working directory.
 RUN apk upgrade --no-cache \
@@ -30,6 +32,7 @@ COPY runtime /opt/magicmtn/runtime
 COPY --from=pi /opt/pi /opt/pi
 RUN ln -s /opt/pi/node_modules/.bin/pi /usr/local/bin/pi \
     && ln -s /opt/pi/node_modules/.bin/codex /usr/local/bin/codex \
+    && ln -s /opt/pi/node_modules/.bin/claude /usr/local/bin/claude \
     && ln -s /opt/pi/node_modules/.bin/opencode /usr/local/bin/opencode \
     && mkdir -m 0700 /home/sandbox/.codex \
     && chown sandbox:sandbox /home/sandbox/.codex \

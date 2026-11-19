@@ -42,14 +42,20 @@ def main():
     verify += f"expected={sources!r};"
     verify += "assert all(hashlib.sha256((root/path).read_bytes()).hexdigest()==checksum for path,checksum in expected.items()), 'image runtime sources differ'"
     run("podman", "run", *platform_options, "--rm", "--network", "none", args.tag, "python3", "-c", verify)
-    expected_pi = json.loads((context / "package.json").read_text())["dependencies"]["@earendil-works/pi-coding-agent"]
+    dependencies = json.loads((context / "package.json").read_text())["dependencies"]
+    expected_pi = dependencies["@earendil-works/pi-coding-agent"]
     installed_pi = subprocess.check_output(["podman", "run", *platform_options, "--rm", "--network", "none",
                                             args.tag, "pi", "--version"], text=True).strip()
     assert installed_pi == expected_pi, f"Pi version mismatch: expected {expected_pi}, got {installed_pi}"
-    expected_codex = json.loads((context / "package.json").read_text())["dependencies"]["@openai/codex"]
+    expected_codex = dependencies["@openai/codex"]
     installed_codex = subprocess.check_output(["podman", "run", *platform_options, "--rm", "--network", "none",
                                                args.tag, "codex", "--version"], text=True).strip()
     assert installed_codex == f"codex-cli {expected_codex}", f"Codex version mismatch: {installed_codex}"
+    if not args.emulated:
+        expected_claude = dependencies["@anthropic-ai/claude-code"]
+        installed_claude = subprocess.check_output(["podman", "run", *platform_options, "--rm", "--network", "none",
+                                                    args.tag, "claude", "--version"], text=True).strip()
+        assert installed_claude == f"{expected_claude} (Claude Code)", f"Claude Code version mismatch: {installed_claude}"
     # No provider credentials or network access are needed for these checks.
     smoke = r'''
 test "$(id -u)" = 10001
@@ -89,6 +95,25 @@ project-venv/bin/python -c 'print("Project virtualenv works")'
     if args.emulated:
         smoke = smoke.replace("fd --version\n", "").replace("rg 'sandbox smoke test' smoke-repo\n", "")
         smoke = smoke.replace("opencode --version\n", "")
+    else:
+        smoke += r'''
+claude auth login --help > /tmp/claude-login-help.txt
+grep -q -- '--claudeai' /tmp/claude-login-help.txt
+cat > /tmp/claude-mcp-smoke.py <<'PY'
+import json
+import sys
+
+for line in sys.stdin:
+    request = json.loads(line)
+    if request.get("method") == "initialize":
+        result = {"protocolVersion": request["params"]["protocolVersion"],
+                  "capabilities": {"tools": {}}, "serverInfo": {"name": "smoke", "version": "1"}}
+        print(json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": result}), flush=True)
+PY
+claude mcp add --transport stdio smoke -- python3 /tmp/claude-mcp-smoke.py
+claude mcp list > /tmp/claude-mcp-smoke.txt
+grep -q 'smoke:.*Connected' /tmp/claude-mcp-smoke.txt
+'''
     run("podman", "run", *platform_options, "--rm", "--network", "none", "--cap-drop", "all",
         "--security-opt", "no-new-privileges", args.tag, "bash", "-euc", smoke)
     fixture = {"session_id": str(uuid.uuid4()), "origin": "http://127.0.0.1:8080",
@@ -142,7 +167,7 @@ project-venv/bin/python -c 'print("Project virtualenv works")'
         "digest": digest, "archive": str(archive), "image_size_bytes": info["Size"], "image_id": info["Id"],
         "containerfile_sha256": hashlib.sha256((context / "Containerfile").read_bytes()).hexdigest(),
         "package_lock_sha256": hashlib.sha256((context / "package-lock.json").read_bytes()).hexdigest(),
-        "emulated_smoke_skips": ["fd", "rg", "opencode"] if args.emulated else [],
+        "emulated_smoke_skips": ["fd", "rg", "opencode", "claude"] if args.emulated else [],
     }
     archive.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(json.dumps(metadata, indent=2))

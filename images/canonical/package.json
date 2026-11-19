@@ -2,8 +2,9 @@
   "name": "magicmtn-canonical-sandbox",
   "version": "0.1.0",
   "private": true,
-  "description": "Pinned Pi, Codex, and OpenCode installations for the canonical MagicMtn sandbox image",
+  "description": "Pinned Pi, Codex, Claude Code, and OpenCode installations for the canonical MagicMtn sandbox image",
   "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.311",
     "@earendil-works/pi-coding-agent": "1.5.2",
     "@openai/codex": "0.169.0",
     "@opencode/cli": "2.3.2"
