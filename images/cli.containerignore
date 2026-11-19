@@ -1,6 +1,8 @@
 interfaces/*
 !interfaces/pi
 !interfaces/pi/**
+!interfaces/opencode
+!interfaces/opencode/**
 .git
 .cargo
 .venv
