@@ -39,7 +39,7 @@ fn tools(local: bool) -> Value {
         tool("sandbox_list", "List MagicMtn sandboxes. No files or credentials are copied locally.", json!({}), &[], true, false),
         tool("sandbox_create", "Create a managed sandbox using MagicMtn Canonical and automatic placement. Keep the ID. On uncertainty, inspect that ID instead of creating a replacement.", json!({"idempotency_key":{"type":"string","format":"uuid","description":"Reuse the same UUID when retrying one creation intent; omitted generates a new intent"}}), &[], false, false),
         tool("sandbox_show", "Inspect a sandbox's state and lifetime.", json!({"id":id}), &["id"], true, false),
-        tool("sandbox_exec", "Run a shell command remotely in the sandbox. Each call starts a fresh shell. Inspect exit_code, timed_out and truncated. Never blindly retry a mutating command after a timeout or transport failure.", json!({"id":id,"command":{"type":"string"},"cwd":{"type":"string","default":"/workspace"},"timeout_ms":{"type":"integer","minimum":1,"maximum":30000,"default":30000}}), &["id","command"], false, true),
+        tool("sandbox_exec", "Run a shell command remotely in the sandbox. Each call starts a fresh shell. Inspect exit_code, timed_out and truncated. Never blindly retry a mutating command after a timeout or transport failure.", json!({"id":id,"command":{"type":"string"},"cwd":{"type":"string","description":"Absolute path inside the sandbox. Omit to start in the sandbox root directory."},"timeout_ms":{"type":"integer","minimum":1,"maximum":30000,"default":30000}}), &["id","command"], false, true),
         tool("sandbox_read_file", "Read a UTF-8 file inside the sandbox (maximum 16 KiB).", json!({"id":id,"path":path}), &["id","path"], true, false),
         tool("sandbox_write_file", "Write UTF-8 text inside the sandbox (maximum 16 KiB), replacing the file. Parent directories must exist. Does not read any local file.", json!({"id":id,"path":path,"content":{"type":"string"}}), &["id","path","content"], false, true),
         tool("sandbox_terminate", "Delete a sandbox and its files. Only use when the user authorizes deletion.", json!({"id":id}), &["id"], false, true)
@@ -48,7 +48,7 @@ fn tools(local: bool) -> Value {
         let create = &mut definitions[1];
         create["description"] = json!("Create a sandbox on the local MagicMtn server. Keep its ID and inspect that ID after uncertain results before retrying. Pi and its model credentials stay on your computer.");
         create["inputSchema"]["properties"]["image"] = json!({"type":"string", "description":"Custom OCI image reference; defaults to MagicMtn Canonical"});
-        definitions[3]["inputSchema"]["properties"]["cwd"]["default"] = json!("/");
+        definitions[3]["inputSchema"]["properties"]["cwd"] = json!({"type":"string","default":"/"});
         let create = &mut definitions[1];
         create["inputSchema"]["properties"]["provider"] =
             json!({"type":"string", "description":"Installed sandbox provider"});
@@ -194,7 +194,7 @@ fn execution(name: &str, args: &Value) -> Result<Value> {
                 (1..=30_000).contains(&timeout),
                 "timeout_ms must be between 1 and 30000"
             );
-            ("import os,sys; os.chdir(sys.argv[1]); os.execv('/bin/sh',['sh','-lc',sys.argv[2]])", vec![cwd.to_owned(), string(args,"command")?.to_owned()], timeout)
+            ("import os,sys; os.chdir(sys.argv[1]); os.environ['PWD']=os.getcwd(); os.execv('/bin/sh',['sh','-lc',sys.argv[2]])", vec![cwd.to_owned(), string(args,"command")?.to_owned()], timeout)
         }
         "sandbox_read_file" => {
             let path = string(args, "path")?;

@@ -11,7 +11,7 @@ def default_directory():
     directory = Path.cwd()
     workspace = Path("/workspace")
     if directory in (Path("/"), Path.home()) and workspace.is_dir():
-        directory = workspace
+        directory = workspace.resolve()
     return directory
 
 

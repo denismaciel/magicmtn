@@ -25,17 +25,21 @@ from pathlib import Path
 from unittest.mock import patch
 namespace = {"__name__": "sandbox_scp_test"}
 exec(sys.argv[1], namespace)
-for cwd, workspace_exists, expected in [
-    ("/workspace", True, "/workspace"),
-    ("/app", True, "/app"),
-    ("/", True, "/workspace"),
-    ("/home/agent", True, "/workspace"),
-    ("/home/agent", False, "/home/agent"),
-    ("/", False, "/"),
+for cwd, workspace_target, expected in [
+    ("/computer", "/computer", "/computer"),
+    ("/", "/computer", "/computer"),
+    ("/home/agent", "/computer", "/computer"),
+    ("/workspace", "/workspace", "/workspace"),
+    ("/app", "/workspace", "/app"),
+    ("/", "/workspace", "/workspace"),
+    ("/home/agent", "/workspace", "/workspace"),
+    ("/home/agent", None, "/home/agent"),
+    ("/", None, "/"),
 ]:
     with patch.object(Path, "cwd", return_value=Path(cwd)), \
          patch.object(Path, "home", return_value=Path("/home/agent")), \
-         patch.object(Path, "is_dir", return_value=workspace_exists):
+         patch.object(Path, "is_dir", return_value=workspace_target is not None), \
+         patch.object(Path, "resolve", return_value=Path(workspace_target or cwd)):
         assert namespace["default_directory"]() == Path(expected)
 "#,
             include_str!("../src/sandbox_scp.py"),
