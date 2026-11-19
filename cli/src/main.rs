@@ -16,6 +16,7 @@ mod execution;
 mod images;
 mod mcp;
 mod mode;
+mod opencode;
 mod pi;
 mod provider_registry;
 mod sandbox_scp;
@@ -152,6 +153,12 @@ enum Commands {
         #[command(subcommand)]
         command: pi::Commands,
     },
+    /// Manage OpenCode workspaces
+    #[command(name = "opencode")]
+    OpenCode {
+        #[command(subcommand)]
+        command: opencode::Commands,
+    },
     /// Install agents in your MagicMtn workspace
     #[command(display_order = 4)]
     Agents {
@@ -185,7 +192,7 @@ enum Commands {
         #[arg(long, conflicts_with = "print")]
         yes: bool,
     },
-    /// Uninstall this CLI and its shell/Pi integration after confirmation
+    /// Uninstall this CLI and its shell and agent integrations after confirmation
     #[command(display_order = 1002)]
     Uninstall,
 }
@@ -822,6 +829,7 @@ async fn run(mut cli: Cli) -> Result<()> {
             return Ok(());
         }
         Commands::Pi { command } => return pi::run(&api, command).await,
+        Commands::OpenCode { command } => return opencode::run(&api, command).await,
         Commands::Mcp { command } => return mcp::run(&api, command).await,
         Commands::Agents { command } => return agents::run(&api, command).await,
         _ => (),

@@ -19,6 +19,7 @@ COPY registry ./registry
 COPY scripts/install-public.sh ./scripts/install-public.sh
 COPY tests ./tests
 COPY interfaces/pi ./interfaces/pi
+COPY interfaces/opencode ./interfaces/opencode
 COPY sdk/rust ./sdk/rust
 RUN cargo zigbuild --release --locked --no-default-features -p magicmtn-cli --bin magic \
     --target x86_64-unknown-linux-musl --target aarch64-unknown-linux-musl \

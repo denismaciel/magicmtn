@@ -1,0 +1,8 @@
+{
+  "name": "magicmtn-opencode",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./tui": "./tui.js"
+  }
+}

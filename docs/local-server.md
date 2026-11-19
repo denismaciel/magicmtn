@@ -46,7 +46,7 @@ magic sandbox new |
 magic sandbox list
 ```
 
-New sandboxes use the MagicMtn Canonical image bundled with your CLI release. Canonical includes Python, Node.js, Pi, Codex, Git, Jujutsu, and GitHub CLI. Provider installation downloads it into Apple Container's local image store. Sandbox creation restores the image automatically if it has been removed.
+New sandboxes use the MagicMtn Canonical image bundled with your CLI release. Canonical includes Python, Node.js, Pi, Codex, OpenCode, Git, Jujutsu, and GitHub CLI. Provider installation downloads it into Apple Container's local image store. Sandbox creation restores the image automatically if it has been removed.
 
 Use a custom image with `magic sandbox new --image alpine:3.24.1`. Image references can use registry tags or immutable digests. Each Canonical sandbox records its exact image digest and retains it across restarts and CLI upgrades.
 

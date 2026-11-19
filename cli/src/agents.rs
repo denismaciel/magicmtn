@@ -18,6 +18,23 @@ pub enum Commands {
 }
 
 pub async fn run(api: &Api, command: Commands) -> Result<()> {
+    if matches!(&command, Commands::Install { agent } if agent == "opencode") {
+        if !api.local {
+            ensure!(api.token.is_some(), "sign in first with `magic login`");
+            api.request(
+                Method::POST,
+                "v1/agents/install",
+                Some(json!({"canonical":"opencode"})),
+            )
+            .await?;
+        }
+        let directory = crate::opencode::install_extension()?;
+        println!(
+            "Installed /magic in {}. Restart OpenCode.",
+            directory.display()
+        );
+        return Ok(());
+    }
     if api.local && matches!(&command, Commands::Install { agent } if agent == "pi") {
         let directory = crate::pi::install_extension()?;
         println!(
@@ -62,8 +79,8 @@ pub async fn run(api: &Api, command: Commands) -> Result<()> {
             });
             let expected_id = if let Some(existing) = existing {
                 ensure!(
-                    existing["sdk"] != "pi",
-                    "Pi is a canonical agent; choose another name"
+                    !matches!(existing["sdk"].as_str(), Some("pi" | "opencode")),
+                    "This is a canonical agent; choose another name"
                 );
                 let id = existing["id"]
                     .as_str()

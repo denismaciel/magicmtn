@@ -16,6 +16,7 @@ struct Installation {
     completions: Vec<PathBuf>,
     shell_edits: Vec<ShellEdit>,
     pi_extension: PathBuf,
+    opencode_extension: PathBuf,
 }
 
 fn configured_directory(variable: &str, fallback: PathBuf) -> PathBuf {
@@ -128,6 +129,7 @@ impl Installation {
             ],
             shell_edits,
             pi_extension: pi.join("extensions/magicmtn"),
+            opencode_extension: crate::opencode::plugin_directory(home),
         })
     }
 
@@ -139,11 +141,15 @@ impl Installation {
         for path in &self.completions {
             remove_file_if_present(path)?;
         }
-        match fs::symlink_metadata(&self.pi_extension) {
-            Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(&self.pi_extension)?,
-            Ok(_) => fs::remove_file(&self.pi_extension)?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
-            Err(error) => return Err(error).context("removing the Pi extension"),
+        for extension in [&self.pi_extension, &self.opencode_extension] {
+            match fs::symlink_metadata(extension) {
+                Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(extension)?,
+                Ok(_) => fs::remove_file(extension)?,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                Err(error) => {
+                    return Err(error).with_context(|| format!("removing {}", extension.display()))
+                }
+            }
         }
         // Keep the CLI available for a retry if any earlier cleanup fails.
         remove_file_if_present(&self.executable)
@@ -200,7 +206,7 @@ fn remove_file_if_present(path: &Path) -> Result<()> {
 fn confirm(input: &mut impl BufRead, output: &mut impl Write) -> Result<bool> {
     write!(
         output,
-        "Uninstall MagicMtn CLI and its shell/Pi integration? [y/N] "
+        "Uninstall MagicMtn CLI and its shell and editor integrations? [y/N] "
     )?;
     output.flush()?;
     let mut answer = String::new();
@@ -221,9 +227,10 @@ pub(crate) async fn run(server: &str) -> Result<()> {
         configured_directory("PI_CODING_AGENT_DIR", home.join(".pi/agent")),
     )?;
     println!(
-        "This will sign out, remove {}, clean up MagicMtn shell completions, and remove {}.",
+        "This will sign out, remove {}, clean up MagicMtn shell completions, and remove {} and {}.",
         installation.executable.display(),
-        installation.pi_extension.display()
+        installation.pi_extension.display(),
+        installation.opencode_extension.display()
     );
     println!("Shared PATH entries, other Pi extensions, and your sandboxes are kept.");
     let mut terminal = fs::OpenOptions::new()
@@ -244,9 +251,7 @@ pub(crate) async fn run(server: &str) -> Result<()> {
         .await
         .context("could not sign out; no installation files were removed")?;
     installation.remove()?;
-    println!(
-        "MagicMtn CLI uninstalled. Restart your shell and run /reload in Pi to finish cleanup."
-    );
+    println!("MagicMtn CLI uninstalled. Restart your shell, Pi, and OpenCode to finish cleanup.");
     Ok(())
 }
 

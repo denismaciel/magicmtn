@@ -288,7 +288,7 @@ pub async fn run(api: &Api, command: Commands) -> Result<()> {
     Ok(())
 }
 
-fn defaults_path(api: &Api, catalog: &Value) -> Result<PathBuf> {
+pub(crate) fn defaults_path(api: &Api, catalog: &Value) -> Result<PathBuf> {
     use sha2::{Digest, Sha256};
     let organization: Uuid = catalog["scope"]["organization_id"]
         .as_str()
@@ -401,7 +401,7 @@ pub(crate) async fn sandbox_shell(api: &Api, id: &str) -> Result<()> {
     .await
 }
 
-async fn terminal(api: &Api, path: &str, label: &str) -> Result<()> {
+pub(crate) async fn terminal(api: &Api, path: &str, label: &str) -> Result<()> {
     ensure!(
         std::io::stdin().is_terminal() && std::io::stdout().is_terminal(),
         "this command requires an interactive terminal"

@@ -29,7 +29,8 @@ fn save_login(home: &std::path::Path, base: &str) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn cli_installs_local_definition_and_pi_with_saved_session() -> anyhow::Result<()> {
+async fn cli_installs_local_definition_and_canonical_agents_with_saved_session(
+) -> anyhow::Result<()> {
     let root = tempfile::tempdir()?;
     let project = root.path().join("error-investigator");
     fs::create_dir_all(project.join("langchain_core/language_models"))?;
@@ -93,8 +94,12 @@ async fn cli_installs_local_definition_and_pi_with_saved_session() -> anyhow::Re
                 }
                 (StatusCode::OK, Json(json!({"id":"11111111-1111-4111-8111-111111111111","version":definition["version"]})))
             } else {
-                assert_eq!(body["canonical"], "pi");
-                (StatusCode::OK, Json(json!({"id":"22222222-2222-4222-8222-222222222222","name":"Pi","version":"canonical:pi:1"})))
+                let name = match body["canonical"].as_str() {
+                    Some("pi") => "Pi",
+                    Some("opencode") => "OpenCode",
+                    other => panic!("unexpected canonical agent {other:?}"),
+                };
+                (StatusCode::OK, Json(json!({"id":"22222222-2222-4222-8222-222222222222","name":name})))
             }
         }),
     );
@@ -115,6 +120,7 @@ async fn cli_installs_local_definition_and_pi_with_saved_session() -> anyhow::Re
         let mut child = Command::new(env!("CARGO_BIN_EXE_magic"))
             .args(["--server-url", &base, "agents", "install", target])
             .env("HOME", &home)
+            .env("XDG_CONFIG_HOME", root.path().join("xdg"))
             .env("PI_CODING_AGENT_DIR", root.path().join("pi-home"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -154,6 +160,22 @@ async fn cli_installs_local_definition_and_pi_with_saved_session() -> anyhow::Re
         .path()
         .join("pi-home/extensions/magicmtn/index.js")
         .is_file());
+    let opencode = install("opencode", None)?;
+    assert!(
+        opencode.status.success(),
+        "{}",
+        String::from_utf8_lossy(&opencode.stderr)
+    );
+    let plugin = root.path().join("xdg/opencode/plugins/magicmtn");
+    for file in [
+        "index.js",
+        "package.json",
+        "tui.js",
+        "magic.js",
+        "config.js",
+    ] {
+        assert!(plugin.join(file).is_file(), "missing {file}");
+    }
     let legacy = Command::new(env!("CARGO_BIN_EXE_magic"))
         .args(["--server-url", &base, "pi", "install"])
         .env("HOME", &home)

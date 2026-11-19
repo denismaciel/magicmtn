@@ -36,6 +36,14 @@ magic agents install pi
 In Pi, `/magic new` starts a workspace using your saved defaults. Use
 `/magic view` to reconnect to an existing sandbox.
 
+## Use OpenCode
+
+After `magic login`, install the integration with `magic agents install opencode` and start OpenCode 2.3.2 or later. Run `/magic new` to start a managed OpenCode workspace, and use Ctrl+] to detach while it keeps running. Run `/magic view` to reconnect, stop or restart the agent, or terminate the workspace.
+
+Use `/magic default` to select a workspace model and `/magic inference` to select a MagicMtn model for your current OpenCode session. Bring a connected API-key provider to a managed workspace with `/magic connected`. The `magic opencode connect` command accepts a model definition and API key over stdin and stores the key in the MagicMtn gateway.
+
+With the local MagicMtn server selected, `magic agents install opencode` adds the sandbox tools and the sandbox menu to OpenCode. OpenCode uses your current provider and retains its local shell and file tools.
+
 ## Run locally
 
 Run a single-user server and Apple Container sandboxes using your own machine and bundled SQLite. Follow [Run MagicMtn locally](docs/local-server.md) to install the provider, start the server, and execute commands in a sandbox.
