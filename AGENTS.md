@@ -8,4 +8,8 @@ Do not add caveats to copy anywhere. Things such as "not enabled yet", "not conn
 
 Use [Google Rust Style Guide] for Rust code.
 
+## Markdown
+
+Keep each Markdown prose paragraph or list item on one source line and let the editor soft-wrap it.
+
 [Google Rust Guide]: https://google.github.io/styleguide/rustguide.html
