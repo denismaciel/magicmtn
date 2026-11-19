@@ -1,5 +1,5 @@
 # Build context: repository root; use images/canonical/.containerignore. This is a tenant sandbox, separate from the server image.
-FROM docker.io/library/node:24-alpine3.24@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS pi
+FROM docker.io/library/node:24.22.3-alpine3.24@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS pi
 WORKDIR /opt/pi
 COPY images/canonical/package.json images/canonical/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
@@ -11,12 +11,14 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
     && install -m 0755 "node_modules/@opencode/$package/bin/opencode" node_modules/@opencode/cli/bin/opencode.exe \
     && rm -rf node_modules/@opencode/cli-linux-*
 
-FROM docker.io/library/node:24-alpine3.24@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+FROM docker.io/library/node:24.22.3-alpine3.24@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 LABEL org.opencontainers.image.source="https://github.com/UseMagicMtn/magicmtn" \
       org.opencontainers.image.title="MagicMtn canonical sandbox" \
       org.opencontainers.image.description="Alpine sandbox with Python, Pi, Codex, OpenCode, Jujutsu, and GitHub CLI" \
       org.opencontainers.image.version="0.1.0"
-RUN apk add --no-cache bash ca-certificates curl fd git github-cli jujutsu python3 py3-pip ripgrep tini \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache bash ca-certificates curl fd git github-cli jujutsu python3 py3-pip ripgrep tini \
+    && npm install --global npm@11.21.3 --ignore-scripts --no-audit --no-fund \
     && addgroup -g 10001 sandbox \
     && adduser -D -u 10001 -G sandbox -s /bin/bash sandbox \
     && mkdir -p /workspace /opt/venv \
