@@ -114,7 +114,7 @@ class SupervisorTests(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text())["origin"], config["integrations_origin"])
             extension = supervisor.directory / "pi" / "extensions" / "magicmtn-mcp" / "index.js"
             self.assertTrue(extension.exists())
-            self.assertIn("mcp_catalog", extension.read_text())
+            self.assertIn("mcp_catalog", (extension.parent / "broker.js").read_text())
         finally:
             supervisor.lock_file.close()
 

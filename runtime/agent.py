@@ -2,7 +2,8 @@
 """Harness supervisor. Network attachment and sync never own the child lifetime.
 
 Only scoped runtime identities enter this supervisor. Long-lived upstream secrets
-remain in trusted services; the integration helper sends requests through the GitHub gateway. Currently the packaged harness adapter is Pi.
+remain in trusted services, and integration requests go through the GitHub
+gateway. Packaged adapters configure Pi and OpenCode.
 """
 import base64
 import collections
@@ -25,6 +26,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from harnesses.opencode import OpenCodeHarness
 from harnesses.pi import PiHarness
 import environment as sandbox_environment
 
@@ -58,18 +60,17 @@ class Supervisor:
         self.closed = threading.Event()
         self.output_ready = threading.Event()
         self.errors = collections.Counter()
-        self.command = self.configure()
+        self.harness = self.configure()
+        self.command = None
         self.runtime_environment = sandbox_environment.configure(
             self.directory, self.config, self.harness.environment(), atomic_json)
 
     def configure(self):
         harness = self.config.get("harness", "pi")
-        if harness != "pi":
+        adapter = {"pi": PiHarness, "opencode": OpenCodeHarness}.get(harness)
+        if adapter is None:
             raise ValueError("harness adapter is not installed in this image")
-        self.harness = PiHarness(self.directory, self.config, self.id, atomic_json)
-        # Resolve the saved session at launch, where failures can be reported
-        # through the authenticated relay as a Pi startup error.
-        return ["pi"]
+        return adapter(self.directory, self.config, self.id, atomic_json)
 
     def environment(self):
         environment = sandbox_environment.apply(self.runtime_environment)
@@ -80,9 +81,7 @@ class Supervisor:
         with self.lock:
             if self.child is not None and self.child.poll() is None:
                 return
-            command = self.command
-            if self.command[0] == "pi":
-                command = self.harness.command()
+            command = self.command or self.harness.command()
             master, slave = pty.openpty()
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", self.size[1], self.size[0], 0, 0))
             # Avoid Python preexec_fn after threads have started. The tiny

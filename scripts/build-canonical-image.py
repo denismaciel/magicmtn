@@ -24,7 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", default="localhost/magicmtn/sandbox:0.1.0")
     parser.add_argument("--platform", help="For example linux/arm64 or linux/amd64; defaults to native")
-    parser.add_argument("--emulated", action="store_true", help="Skip fd and ripgrep smoke checks under QEMU; validate those on a native runtime before rollout")
+    parser.add_argument("--emulated", action="store_true", help="Skip architecture-sensitive smoke checks under QEMU and require native verification before rollout")
     parser.add_argument("--skip-build", action="store_true", help="Smoke-test and export an existing local image")
     parser.add_argument("--output", type=Path, default=root / "dist/images")
     args = parser.parse_args()
@@ -62,6 +62,7 @@ node --check /opt/magicmtn/runtime/errors.js
 node --check /opt/magicmtn/runtime/error-worker.js
 pi --version
 codex --version
+opencode --version
 codex login --help > /tmp/codex-login-help.txt
 grep -q -- '--device-auth' /tmp/codex-login-help.txt
 codex mcp --help > /tmp/codex-mcp-help.txt
@@ -136,7 +137,7 @@ python -m venv /workspace/project-venv
         "digest": digest, "archive": str(archive), "image_size_bytes": info["Size"], "image_id": info["Id"],
         "containerfile_sha256": hashlib.sha256((context / "Containerfile").read_bytes()).hexdigest(),
         "package_lock_sha256": hashlib.sha256((context / "package-lock.json").read_bytes()).hexdigest(),
-        "emulated_smoke_skips": ["fd", "rg"] if args.emulated else [],
+        "emulated_smoke_skips": ["fd", "rg", "opencode"] if args.emulated else [],
     }
     archive.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(json.dumps(metadata, indent=2))

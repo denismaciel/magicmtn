@@ -44,7 +44,8 @@ class PiHarness:
         if config.get("integrations_origin"):
             extension = self.directory / "extensions" / "magicmtn-mcp"
             extension.mkdir(parents=True, exist_ok=True)
-            (extension / "index.js").write_text(pathlib.Path(__file__).resolve().parents[1].joinpath("mcp.js").read_text())
+            (extension / "index.js").write_text((runtime / "mcp.js").read_text())
+            (extension / "broker.js").write_text((runtime / "broker.js").read_text())
             (extension / "package.json").write_text('{"type":"module"}')
 
     def command(self):

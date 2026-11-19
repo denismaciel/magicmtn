@@ -1,6 +1,6 @@
 # Release MagicMtn Canonical
 
-Canonical is built from `images/canonical/Containerfile` and published to the public OCI repository `ghcr.io/usemagicmtn/canonical`. It includes the sandbox runtime and pinned Pi and Codex installations.
+Canonical is built from `images/canonical/Containerfile` and published to the public OCI repository `ghcr.io/usemagicmtn/canonical`. It includes the sandbox runtime and pinned Pi, Codex, and OpenCode installations.
 
 ## Release with the CLI
 

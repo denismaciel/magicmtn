@@ -12,6 +12,9 @@
 !runtime/github.py
 !runtime/gh.py
 !runtime/mcp.js
+!runtime/broker.js
+!runtime/opencode.js
+!runtime/opencode-tui.js
 !runtime/context.js
 !runtime/context.md
 !runtime/errors.js

@@ -5,6 +5,7 @@ on:
     paths:
       - 'runtime/**'
       - 'interfaces/pi/**'
+      - 'interfaces/opencode/**'
       - 'images/canonical/**'
       - 'scripts/build-canonical-image.py'
       - '.github/workflows/sandbox-runtime.yml'
@@ -13,6 +14,7 @@ on:
     paths:
       - 'runtime/**'
       - 'interfaces/pi/**'
+      - 'interfaces/opencode/**'
       - 'images/canonical/**'
       - 'scripts/build-canonical-image.py'
       - '.github/workflows/sandbox-runtime.yml'
@@ -34,8 +36,12 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r runtime/requirements.txt
-      - run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+      - run: |
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          node node_modules/@opencode/cli/postinstall.mjs
         working-directory: images/canonical
       - run: python3 -m unittest discover -s runtime/tests
       - name: Verify real Pi inference and MCP parity
         run: MAGICMTN_TEST_PI="$GITHUB_WORKSPACE/images/canonical/node_modules/.bin/pi" python3 -m unittest discover -s runtime/tests -p test_environment.py
+      - name: Verify real OpenCode workspace and provider routing
+        run: MAGICMTN_TEST_OPENCODE="$GITHUB_WORKSPACE/images/canonical/node_modules/.bin/opencode" python3 -m unittest discover -s runtime/tests -p test_opencode.py
