@@ -85,6 +85,7 @@ python -m venv /workspace/project-venv
 '''
     if args.emulated:
         smoke = smoke.replace("fd --version\n", "").replace("rg 'sandbox smoke test' /workspace/smoke-repo\n", "")
+        smoke = smoke.replace("opencode --version\n", "")
     run("podman", "run", *platform_options, "--rm", "--network", "none", "--cap-drop", "all",
         "--security-opt", "no-new-privileges", args.tag, "bash", "-euc", smoke)
     fixture = {"session_id": str(uuid.uuid4()), "origin": "http://127.0.0.1:8080",
