@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn fireworks_offerings_have_distinct_inference_identities() {
         let offerings = model_offerings("fireworks").unwrap();
-        assert_eq!(offerings.len(), 10);
+        assert_eq!(offerings.len(), 11);
         assert_eq!(offerings[0], default_model("fireworks").unwrap());
         for (offering, display, model) in [
             (
@@ -166,6 +166,11 @@ mod tests {
                 "Kimi K3.1 Pro",
                 "accounts/fireworks/models/kimi-k3p1-pro",
             ),
+            (
+                &offerings[10],
+                "MiniMax M3.1 Flash",
+                "accounts/fireworks/models/minimax-m3p1-flash",
+            ),
         ] {
             assert_eq!(offering.display_name, display);
             assert_eq!(offering.source, "fireworks");
@@ -188,6 +193,9 @@ mod tests {
         assert_eq!(offerings[9].status, "enabled");
         assert_eq!(offerings[9].task_type, "chat");
         assert_eq!(offerings[9].capabilities.tool_calls, Some(true));
+        assert_eq!(offerings[10].status, "enabled");
+        assert_eq!(offerings[10].task_type, "chat");
+        assert_eq!(offerings[10].capabilities.tool_calls, Some(true));
     }
 
     #[test]
