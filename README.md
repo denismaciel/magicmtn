@@ -12,10 +12,10 @@
 Install the command-line interface:
 
 ```sh
-curl -fsSL https://control.magicmtn.ai/install.sh | sh
+curl -fsSL https://magicmtn.ai/install.sh | sh
 ```
 
-Or via Homebrew:
+Or via Homebrew on Apple Silicon:
 
 ```sh
 brew install UseMagicMtn/tap/magic

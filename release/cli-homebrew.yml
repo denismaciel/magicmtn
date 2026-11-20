@@ -1,0 +1,254 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Sync the MagicMtn Homebrew formula when a CLI release is promoted in S3.
+
+Parameters:
+  ReleaseBucket:
+    Type: String
+    Default: magicmtn-cli-beta-993499103295
+  GitHubAppParameter:
+    Type: String
+    Default: /magicmtn/cli/homebrew-github-app
+    AllowedPattern: '/[A-Za-z0-9_./-]+'
+
+Resources:
+  BuildLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/codebuild/${AWS::StackName}'
+      RetentionInDays: 30
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${AWS::StackName}'
+      Policies:
+        - PolicyName: SyncHomebrew
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt BuildLogs.Arn
+              - Effect: Allow
+                Action: ssm:GetParameters
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${GitHubAppParameter}'
+              - Effect: Allow
+                Action: codebuild:RetryBuild
+                Resource: !Sub 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${AWS::StackName}'
+
+  Sync:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref AWS::StackName
+      ServiceRole: !GetAtt BuildRole.Arn
+      TimeoutInMinutes: 5
+      ConcurrentBuildLimit: 1
+      AutoRetryLimit: 2
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+          - Name: RELEASE_URL
+            Value: !Sub 'https://${ReleaseBucket}.s3.${AWS::Region}.${AWS::URLSuffix}'
+          - Name: TAP_GITHUB_APP
+            Type: PARAMETER_STORE
+            Value: !Ref GitHubAppParameter
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref BuildLogs
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          env:
+            shell: bash
+          phases:
+            build:
+              commands:
+                - |
+                  python3 - <<'PY'
+                  import base64
+                  import json
+                  import os
+                  import re
+                  import subprocess
+                  import tempfile
+                  import time
+                  from urllib.error import HTTPError
+                  from urllib.request import Request, urlopen
+
+                  base = os.environ["RELEASE_URL"]
+                  # The installer is uploaded last. Read its release even if latest.json
+                  # has already been updated by the next publication.
+                  with urlopen(base + "/install.sh", timeout=30) as response:
+                      installer = response.read().decode("utf-8")
+                  match = re.search(r"^release='((\d{8})-(?:alpha|beta|prerelease|stable)-(\d+))'$", installer, re.MULTILINE)
+                  if not match:
+                      raise ValueError("The public installer does not name a valid release")
+                  release, date, timestamp = match.groups()
+                  directory = f"{base}/releases/{release}"
+                  with urlopen(directory + "/release.json", timeout=30) as response:
+                      manifest = json.load(response)
+                  digest = manifest["platforms"]["darwin-arm64"]
+                  if manifest["release"] != release or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                      raise ValueError("Invalid macOS release metadata")
+                  with urlopen(directory + "/magic-darwin-arm64.sha256", timeout=30) as response:
+                      if response.read().decode("ascii").split() != [digest, "magic"]:
+                          raise ValueError("The installer and Homebrew checksums disagree")
+
+                  formula = f"""# Generated from the promoted MagicMtn CLI release.
+                  class Magic < Formula
+                    desc "Command-line client for MagicMtn"
+                    homepage "https://magicmtn.ai"
+                    url "{directory}/magic-darwin-arm64", using: :nounzip
+                    version "{date}.{timestamp}"
+                    sha256 "{digest}"
+
+                    depends_on :macos
+                    depends_on arch: :arm64
+
+                    def install
+                      chmod 0755, "magic-darwin-arm64"
+                      bin.install "magic-darwin-arm64" => "magic"
+                    end
+
+                    test do
+                      system bin/"magic", "--version"
+                    end
+                  end
+                  """.encode()
+
+                  def github(path, token, method="GET", payload=None):
+                      request = Request(
+                          "https://api.github.com" + path,
+                          data=None if payload is None else json.dumps(payload).encode(),
+                          headers={
+                              "Accept": "application/vnd.github+json",
+                              "Authorization": f"Bearer {token}",
+                              "Content-Type": "application/json",
+                              "X-GitHub-Api-Version": "2022-11-28",
+                          },
+                          method=method,
+                      )
+                      with urlopen(request, timeout=30) as response:
+                          return json.load(response)
+
+                  def jwt_part(data):
+                      return base64.urlsafe_b64encode(data).rstrip(b"=")
+
+                  credentials = json.loads(os.environ.pop("TAP_GITHUB_APP"))
+                  now = int(time.time())
+                  claims = {"iat": now - 60, "exp": now + 540, "iss": credentials["client_id"]}
+                  unsigned = jwt_part(b'{"alg":"RS256","typ":"JWT"}') + b"." + jwt_part(json.dumps(claims).encode())
+                  with tempfile.NamedTemporaryFile() as private_key:
+                      private_key.write(credentials["private_key"].encode())
+                      private_key.flush()
+                      signature = subprocess.check_output(
+                          ["openssl", "dgst", "-sha256", "-sign", private_key.name], input=unsigned
+                      )
+                  jwt = (unsigned + b"." + jwt_part(signature)).decode()
+                  installation = int(credentials["installation_id"])
+                  token = github(f"/app/installations/{installation}/access_tokens", jwt, "POST", {
+                      "repositories": ["homebrew-tap"],
+                      "permissions": {"contents": "write"},
+                  })["token"]
+                  repository = "UseMagicMtn/homebrew-tap"
+                  repo_path = f"/repos/{repository}"
+                  head = github(repo_path + "/commits/main", token)
+                  if not head["commit"]["verification"]["verified"]:
+                      raise ValueError("The Homebrew tap head lacks a verified signature")
+                  formula_path = "Formula/magic.rb"
+                  try:
+                      current = github(f"{repo_path}/contents/{formula_path}?ref={head['sha']}", token)
+                  except HTTPError as error:
+                      if error.code != 404:
+                          raise
+                  else:
+                      if base64.b64decode(current["content"]) == formula:
+                          print(f"Homebrew already serves CLI release {release}")
+                          raise SystemExit(0)
+                  # GitHub signs createCommitOnBranch commits for the authenticated app.
+                  result = github("/graphql", token, "POST", {
+                      "query": """
+                          mutation($input: CreateCommitOnBranchInput!) {
+                            createCommitOnBranch(input: $input) {
+                              commit { oid signature { isValid } }
+                            }
+                          }
+                      """,
+                      "variables": {"input": {
+                          "branch": {"repositoryNameWithOwner": repository, "branchName": "main"},
+                          "expectedHeadOid": head["sha"],
+                          "message": {"headline": f"Publish MagicMtn CLI {release}"},
+                          "fileChanges": {"additions": [{
+                              "path": formula_path,
+                              "contents": base64.b64encode(formula).decode(),
+                          }]},
+                      }},
+                  })
+                  if result.get("errors"):
+                      raise ValueError(f"GitHub could not commit the formula: {result['errors']}")
+                  commit = result["data"]["createCommitOnBranch"]["commit"]
+                  if not (commit["signature"] or {}).get("isValid"):
+                      raise ValueError(f"Homebrew formula commit {commit['oid']} lacks a verified signature")
+                  print(f"Homebrew now serves CLI release {release}")
+                  PY
+
+  EventRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/${AWS::StackName}'
+      Policies:
+        - PolicyName: StartHomebrewSync
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: codebuild:StartBuild
+                Resource: !GetAtt Sync.Arn
+
+  InstallerPublished:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Ref AWS::StackName
+      EventPattern:
+        source: [aws.s3]
+        detail-type: [Object Created]
+        detail:
+          bucket:
+            name: [!Ref ReleaseBucket]
+          object:
+            key: [install.sh]
+      Targets:
+        - Id: SyncHomebrew
+          Arn: !GetAtt Sync.Arn
+          RoleArn: !GetAtt EventRole.Arn
+          Input: '{}'
