@@ -29,6 +29,13 @@
       "platforms": [
         "macos-aarch64"
       ]
+    },
+    {
+      "name": "ollama",
+      "description": "Run chat, tool calls, and text embeddings locally with Ollama.",
+      "platforms": [
+        "macos-aarch64"
+      ]
     }
   ]
 }

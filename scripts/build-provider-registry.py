@@ -82,6 +82,10 @@ def main():
     subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=mxc, check=True)
     version = tomllib.loads((mxc / 'Cargo.toml').read_text())['package']['version']
     package('microsoft-mxc', version, 'macos', 'aarch64', mxc / 'target/release/magicmtn-provider-microsoft-mxc', mxc / 'LICENSE')
+    ollama = SOURCES / 'provider-ollama'
+    subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=ollama, check=True)
+    version = tomllib.loads((ollama / 'Cargo.toml').read_text())['package']['version']
+    package('ollama', version, 'macos', 'aarch64', ollama / 'target/release/magicmtn-provider-ollama', ollama / 'LICENSE')
     build_linux('firecracker', ['x86_64', 'aarch64'])
     build_linux('nvx', ['x86_64'])
     print(OUT)
