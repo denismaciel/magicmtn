@@ -104,8 +104,8 @@ mod tests {
                     "completion",
                 ],
             ),
-            ("magic whoami ", vec!["plan"]),
-            ("magic help whoami ", vec!["plan"]),
+            ("magic whoami ", vec![]),
+            ("magic help whoami ", vec![]),
             ("magic completion ", vec!["bash", "fish", "zsh"]),
             ("magic completion --print ", vec!["bash", "fish", "zsh"]),
             ("magic pi ", vec!["install", "defaults", "attach", "create"]),
@@ -136,12 +136,10 @@ mod tests {
                 !candidates.contains(&"obsolete"),
                 "stale completion survived reload"
             );
-            if line == "magic " || line == "magic help " {
-                assert!(
-                    !candidates.contains(&"plan"),
-                    "plan must be nested under whoami"
-                );
-            }
+            assert!(
+                !candidates.contains(&"plan"),
+                "{line}: retired plan command appeared in completions"
+            );
             for value in expected {
                 assert!(
                     candidates.contains(&value),

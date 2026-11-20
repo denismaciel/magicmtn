@@ -141,12 +141,9 @@ enum Commands {
     /// Revoke the saved CLI session and sign out
     #[command(display_order = 1001)]
     Logout,
-    /// Show your account and current plan
+    /// Show your signed-in account
     #[command(display_order = 7)]
-    Whoami {
-        #[command(subcommand)]
-        command: Option<WhoamiCommands>,
-    },
+    Whoami,
     /// Manage Pi workspaces and inference
     #[command(display_order = 1)]
     Pi {
@@ -217,12 +214,6 @@ enum ServerCommands {
         #[arg(long, value_parser = magicmtn_local::network_name)]
         network: Option<String>,
     },
-}
-
-#[derive(Subcommand)]
-enum WhoamiCommands {
-    /// Show plan access for your organization, or your personal account
-    Plan,
 }
 
 #[derive(Subcommand)]
@@ -809,23 +800,12 @@ async fn run(mut cli: Cli) -> Result<()> {
     match command {
         Commands::Login { client } => return authentication::login(&api, &client).await,
         Commands::Logout => return authentication::logout(&api).await,
-        Commands::Whoami { command: None } => {
+        Commands::Whoami => {
             if local {
                 println!("Mode: Local\nServer: {}", api.base);
             } else {
                 println!("{}", authentication::whoami(&api).await?);
             }
-            return Ok(());
-        }
-        Commands::Whoami {
-            command: Some(WhoamiCommands::Plan),
-        } => {
-            let access = if local {
-                json!({"mode":"local", "plan":"local", "access_active":true})
-            } else {
-                authentication::plan_access(&api).await?
-            };
-            println!("{}", serde_json::to_string_pretty(&access)?);
             return Ok(());
         }
         Commands::Pi { command } => return pi::run(&api, command).await,
@@ -837,8 +817,6 @@ async fn run(mut cli: Cli) -> Result<()> {
     let Commands::Sandbox { command } = command else {
         unreachable!()
     };
-    // Ascent is available by default. The server checks current account access;
-    // an older login's cached subscription must not block sandbox requests.
     use reqwest::Method;
     match command {
         SandboxCommands::New {

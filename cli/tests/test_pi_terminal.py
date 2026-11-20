@@ -65,7 +65,7 @@ class TerminalTest(unittest.TestCase):
             credentials = pathlib.Path(root) / ".config/magicmtn/cli"
             credentials.mkdir(parents=True)
             path = credentials / (hashlib.sha256(origin.encode()).hexdigest() + ".json")
-            path.write_text(json.dumps({"server": origin, "token": "test-cli-session", "plan_access": {"plan": "ascent", "access_active": True}}))
+            path.write_text(json.dumps({"server": origin, "token": "test-cli-session"}))
             master, slave = pty.openpty()
             previous = termios.tcgetattr(slave)
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))

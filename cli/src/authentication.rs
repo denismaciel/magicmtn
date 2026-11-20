@@ -58,21 +58,7 @@ impl Credentials {
         Ok(())
     }
 
-    #[cfg(test)]
-    fn plan_access(&self, server: &Url) -> Result<Value> {
-        self.read(server)?
-            .and_then(|value| {
-                value
-                    .get("plan_access")
-                    .filter(|plan| plan.is_object())
-                    .cloned()
-            })
-            .context(
-                "saved account plan is missing; run `magic login` to refresh your account information",
-            )
-    }
-
-    fn save(&self, server: &Url, token: &str, plan_access: Option<&Value>) -> Result<()> {
+    fn save(&self, server: &Url, token: &str) -> Result<()> {
         let mut builder = fs::DirBuilder::new();
         builder.recursive(true);
         #[cfg(unix)]
@@ -89,7 +75,7 @@ impl Credentials {
         let mut file = tempfile::NamedTempFile::new_in(&self.directory)?;
         serde_json::to_writer(
             &mut file,
-            &json!({"server": server.as_str(), "token": token, "plan_access": plan_access}),
+            &json!({"server": server.as_str(), "token": token}),
         )?;
         file.flush()?;
         file.as_file().sync_all()?;
@@ -177,18 +163,18 @@ async fn wait_for_approval(
     origin: &str,
     handoff: &Value,
     timeout: Duration,
-) -> Result<(String, Value)> {
-    let body = json!({"id": required_string(handoff, "id")?, "secret": required_string(handoff, "secret")?});
+) -> Result<String> {
+    let body = json!({
+        "id": required_string(handoff, "id")?,
+        "secret": required_string(handoff, "secret")?,
+        "account_only": true,
+    });
     tokio::time::timeout(timeout, async {
         loop {
             let result =
                 auth_request(api, "auth/desktop/poll", Some(origin), Some(body.clone())).await?;
             match result["approved"].as_bool() {
-                Some(true) => {
-                    let plan = result.get("plan_access").filter(|plan| plan.is_object())
-                        .context("server did not provide account plan information; update the server and run `magic login` again")?;
-                    return Ok((required_string(handoff, "secret")?.to_owned(), plan.clone()));
-                }
+                Some(true) => return Ok(required_string(handoff, "secret")?.to_owned()),
                 Some(false) => tokio::time::sleep(Duration::from_secs(1)).await,
                 None => bail!("invalid authentication approval response"),
             }
@@ -234,8 +220,8 @@ pub(crate) async fn login(api: &Api, client: &str) -> Result<()> {
     if open_browser(&url).is_err() {
         eprintln!("Could not open a browser automatically. Open the URL above to continue.");
     }
-    let (token, plan) = wait_for_approval(api, &origin, &handoff, Duration::from_secs(300)).await?;
-    Credentials::new()?.save(&api.base, &token, Some(&plan))?;
+    let token = wait_for_approval(api, &origin, &handoff, Duration::from_secs(300)).await?;
+    Credentials::new()?.save(&api.base, &token)?;
     if !development {
         crate::mode::select(&crate::mode::Selection::Cloud {
             server: api.base.to_string(),
@@ -310,22 +296,6 @@ async fn account_organization(api: &Api) -> Result<Option<Value>> {
     Ok(organizations.first().cloned())
 }
 
-async fn organization_plan_access(api: &Api, organization: Option<&Value>) -> Result<Value> {
-    let path = match organization {
-        Some(organization) => {
-            let id = uuid::Uuid::parse_str(required_string(organization, "id")?)?;
-            format!("auth/billing/access?organization_id={id}")
-        }
-        None => "auth/billing/access".to_owned(),
-    };
-    api.request(Method::GET, &path, None).await
-}
-
-pub(crate) async fn plan_access(api: &Api) -> Result<Value> {
-    let organization = account_organization(api).await?;
-    organization_plan_access(api, organization.as_ref()).await
-}
-
 pub(crate) async fn whoami(api: &Api) -> Result<String> {
     ensure!(
         api.token.is_some(),
@@ -333,25 +303,12 @@ pub(crate) async fn whoami(api: &Api) -> Result<String> {
     );
     let user = api.request(Method::GET, "auth/me", None).await?;
     let email = required_string(&user, "email")?;
-    let organization = account_organization(api).await?;
-    let access = organization_plan_access(api, organization.as_ref()).await?;
-    let active = access["access_active"]
-        .as_bool()
-        .context("invalid plan access response")?;
-    let plan = match required_string(&access, "plan")? {
-        "ascent" => "Ascent",
-        plan => plan,
-    };
-    let mut output = format!("Email: {email}\n");
-    if let Some(organization) = organization {
+    let mut output = format!("Email: {email}");
+    if let Some(organization) = account_organization(api).await? {
         output.push_str(&format!(
-            "Organization: {}\n",
+            "\nOrganization: {}",
             required_string(&organization, "display_name")?
         ));
-    }
-    output.push_str(&format!("Plan: {plan}"));
-    if access["plan"].is_string() && !active {
-        output.push_str(" (inactive)");
     }
     Ok(output)
 }
@@ -426,17 +383,13 @@ mod tests {
         fs::write(credentials.directory.join("other.json"), b"invalid JSON")?;
         credentials.ensure_signed_out(&url)?;
         assert_eq!(fs::read(&defaults_path)?, defaults);
-        credentials.save(&url, "valid", None)?;
+        credentials.save(&url, "valid")?;
         let error = credentials.ensure_signed_out(&url).unwrap_err().to_string();
         assert!(error.contains("logout"));
-        credentials.save(&url, "expired", None)?;
+        credentials.save(&url, "expired")?;
         assert!(credentials.ensure_signed_out(&url).is_err());
         credentials.remove(&url)?;
-        credentials.save(
-            &Url::parse("http://127.0.0.1:1/")?,
-            "developer-session",
-            None,
-        )?;
+        credentials.save(&Url::parse("http://127.0.0.1:1/")?, "developer-session")?;
         server.abort();
         credentials.ensure_signed_out(&url)?;
         fs::write(credentials.path(&url), b"{}")?;
@@ -452,7 +405,7 @@ mod tests {
         let app = Router::new()
             .route("/auth/config", get(|State(base): State<String>| async move { Json(json!({"origin":base})) }))
             .route("/auth/desktop/start", post(|State(base): State<String>| async move { Json(json!({"id":"request", "secret":"approved-session", "url":format!("{base}/auth/desktop?request=request")})) }))
-            .route("/auth/desktop/poll", post(|| async { Json(json!({"approved":true, "plan_access":{"plan":"ascent", "access_active":true}})) }))
+            .route("/auth/desktop/poll", post(|| async { Json(json!({"approved":true})) }))
             .with_state(base.clone());
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let home = tempfile::tempdir()?;
@@ -549,33 +502,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn whoami_and_plan_resolve_sole_organization_or_personal_scope() -> Result<()> {
-        use axum::extract::Query;
-        use std::collections::HashMap;
-        let first = "11111111-1111-4111-8111-111111111111";
+    async fn whoami_reports_account_and_optional_organization() -> Result<()> {
         let app = Router::new()
-            .route("/auth/me", get(|headers: HeaderMap| async move {
-                if headers["authorization"] == "Bearer expired" {
-                    (axum::http::StatusCode::UNAUTHORIZED, Json(json!({})))
-                } else {
-                    (axum::http::StatusCode::OK, Json(json!({"email":"person@example.test"})))
-                }
-            }))
-            .route("/auth/organizations", get(move |headers: HeaderMap| async move {
-                let solo = matches!(headers["authorization"].to_str().unwrap(), "Bearer solo" | "Bearer unsubscribed");
-                Json(if solo { json!([]) } else {
-                    json!([{"id":first,"display_name":"Acme"}])
-                })
-            }))
-            .route("/auth/billing/access", get(move |headers: HeaderMap, Query(query): Query<HashMap<String,String>>| async move {
-                let plan = match query.get("organization_id").map(String::as_str) {
-                    Some(id) if id == first => "ascent",
-                    None => "ascent",
-                    _ => panic!("unexpected billing scope"),
-                };
-                let token = headers["authorization"].to_str().unwrap();
-                Json(json!({"plan":plan,"access_active":token != "Bearer inactive"}))
-            }));
+            .route(
+                "/auth/me",
+                get(|headers: HeaderMap| async move {
+                    if headers["authorization"] == "Bearer expired" {
+                        (axum::http::StatusCode::UNAUTHORIZED, Json(json!({})))
+                    } else {
+                        (
+                            axum::http::StatusCode::OK,
+                            Json(json!({"email":"person@example.test"})),
+                        )
+                    }
+                }),
+            )
+            .route(
+                "/auth/organizations",
+                get(|headers: HeaderMap| async move {
+                    Json(if headers["authorization"] == "Bearer solo" {
+                        json!([])
+                    } else {
+                        json!([{"display_name":"Acme"}])
+                    })
+                }),
+            );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let mut api = Api::new(&format!("http://{}", listener.local_addr()?))?;
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -585,26 +536,11 @@ mod tests {
             .to_string()
             .contains("magic login"));
         api.token = Some("solo".into());
-        assert_eq!(
-            whoami(&api).await?,
-            "Email: person@example.test\nPlan: Ascent"
-        );
-        assert_eq!(plan_access(&api).await?["plan"], "ascent");
-        api.token = Some("unsubscribed".into());
-        assert_eq!(
-            whoami(&api).await?,
-            "Email: person@example.test\nPlan: Ascent"
-        );
+        assert_eq!(whoami(&api).await?, "Email: person@example.test");
         api.token = Some("member".into());
         assert_eq!(
             whoami(&api).await?,
-            "Email: person@example.test\nOrganization: Acme\nPlan: Ascent"
-        );
-        assert_eq!(plan_access(&api).await?["plan"], "ascent");
-        api.token = Some("inactive".into());
-        assert_eq!(
-            whoami(&api).await?,
-            "Email: person@example.test\nOrganization: Acme\nPlan: Ascent (inactive)"
+            "Email: person@example.test\nOrganization: Acme"
         );
         api.token = Some("expired".into());
         assert!(whoami(&api)
@@ -625,14 +561,21 @@ mod tests {
         let server = Url::parse("http://127.0.0.1:8080/")?;
         let other = Url::parse("http://127.0.0.1:8081/")?;
         assert_eq!(credentials.load(&server)?, None);
-        credentials.save(
-            &server,
-            "first",
-            Some(&json!({"plan":"ascent","access_active":true})),
+        fs::create_dir_all(&credentials.directory)?;
+        fs::write(
+            credentials.path(&server),
+            serde_json::to_vec(&json!({
+                "server": server.as_str(),
+                "token": "first",
+                "plan_access": {"plan": "ascent", "access_active": true}
+            }))?,
         )?;
-        assert_eq!(credentials.plan_access(&server)?["plan"], "ascent");
-        credentials.save(&server, "replacement", None)?;
-        assert!(credentials.plan_access(&server).is_err());
+        assert_eq!(credentials.load(&server)?.as_deref(), Some("first"));
+        credentials.save(&server, "replacement")?;
+        assert_eq!(
+            credentials.read(&server)?,
+            Some(json!({"server": server.as_str(), "token": "replacement"}))
+        );
         assert_eq!(credentials.load(&server)?.as_deref(), Some("replacement"));
         assert_eq!(credentials.load(&other)?, None);
         #[cfg(unix)]
@@ -670,8 +613,8 @@ mod tests {
             .route("/auth/desktop/poll", post(|State(polls): State<Arc<AtomicUsize>>, headers: HeaderMap, Json(body): Json<Value>| async move {
                 assert_eq!(headers["host"], "api.magicmtn.ai");
                 assert_eq!(headers["origin"], "https://control.magicmtn.ai");
-                assert_eq!(body, json!({"id": "request-id", "secret": "session-secret"}));
-                Json(json!({"approved": polls.fetch_add(1, Ordering::SeqCst) > 0, "plan_access":{"plan":"ascent","access_active":true}}))
+                assert_eq!(body, json!({"id": "request-id", "secret": "session-secret", "account_only": true}));
+                Json(json!({"approved": polls.fetch_add(1, Ordering::SeqCst) > 0}))
             }))
             .route("/v1/providers", get(|headers: HeaderMap| async move {
                 assert_eq!(headers["authorization"], "Bearer session-secret");
@@ -714,15 +657,13 @@ mod tests {
                 .contains("timed out")
         );
         polls.store(0, Ordering::SeqCst);
-        let (token, plan) =
-            wait_for_approval(&api, &origin, &handoff, Duration::from_secs(3)).await?;
+        let token = wait_for_approval(&api, &origin, &handoff, Duration::from_secs(3)).await?;
         assert_eq!(polls.load(Ordering::SeqCst), 2);
         let directory = tempfile::tempdir()?;
         let credentials = Credentials {
             directory: directory.path().join("cli"),
         };
-        credentials.save(&api.base, &token, Some(&plan))?;
-        assert_eq!(credentials.plan_access(&api.base)?, plan);
+        credentials.save(&api.base, &token)?;
         api.token = credentials.load(&api.base)?;
         assert_eq!(
             api.request(Method::GET, "v1/providers", None).await?,
