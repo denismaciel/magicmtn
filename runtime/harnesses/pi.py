@@ -19,7 +19,7 @@ class PiHarness:
             "baseUrl": endpoint, "api": api, "apiKey": config["token"], "models": [model]}}})
         settings_path = self.directory / "settings.json"
         settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
-        settings.update(defaultProvider="magicmtn", defaultModel=model["id"])
+        settings.update(defaultProvider="magicmtn", defaultModel=model["id"], hideThinkingBlock=True)
         atomic_json(settings_path, settings)
         if config.get("workspace_extension"):
             extension = self.directory / "extensions" / "magicmtn-workspace"

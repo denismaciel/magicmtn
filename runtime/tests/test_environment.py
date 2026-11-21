@@ -56,7 +56,7 @@ class EnvironmentTests(unittest.TestCase):
         self.assertNotIn("host-secret", json.dumps(supervisor.runtime_environment))
         config_dir = pathlib.Path(shell["PI_CODING_AGENT_DIR"])
         self.assertEqual(json.loads((config_dir / "settings.json").read_text()),
-                         {"defaultProvider": "magicmtn", "defaultModel": "test-model"})
+                         {"defaultProvider": "magicmtn", "defaultModel": "test-model", "hideThinkingBlock": True})
         self.assertTrue((config_dir / "extensions/magicmtn-mcp/index.js").is_file())
         self.assertTrue((config_dir / "extensions/magicmtn-workspace/index.js").is_file())
         context = config_dir / "extensions/magicmtn-context"
