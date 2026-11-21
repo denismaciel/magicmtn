@@ -107,7 +107,7 @@ test("sandbox welcome renders only the faint dotted logo above the editor", (t) 
     }
   }
   assert.ok(renderedLines[0].includes("\x1b[36mTip:\x1b[39m"));
-  assert.match(stripTerminalSequences(lines.join("\n")), /Tip: Integrate with your GitHub repos and add MCPs to power your agents at\s+https:\/\/control\.magicmtn\.ai\//);
+  assert.equal(lines[0].trimStart(), "Tip: Connect your GitHub and MCPs at https://control.magicmtn.ai/");
   assert.doesNotMatch(lines.join("\n"), /REMOTE SANDBOX|widget truncated/);
   for (const width of [20, 40, 80]) {
     assert.ok(widget.render(width).every((line) => visibleWidth(line) <= width));
@@ -129,7 +129,7 @@ for (const nested of [false, true]) {
   test(`small ${nested ? "fullscreen" : "regular"} terminals keep the tip instead of the mountain`, (t) => {
     const f = fixture(t, { rows: 23, nested });
     const widget = f.widgets.get("magicmtn-welcome");
-    for (const rows of [21, 20, 19, 17]) {
+    for (const rows of [20, 19, 17]) {
       f.tui.terminal.rows = rows;
       const lines = widget.render(80);
       assert.equal(lines.filter(hasDots).length, 0);

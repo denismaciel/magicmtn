@@ -126,7 +126,7 @@ export default function workspaceStatus(pi) {
     // A component avoids Pi's ten-line limit for string-array widgets.
     ctx.ui.setWidget("magicmtn-welcome", (tui, theme) => {
       requestRender = () => tui.requestRender();
-      const tip = `   ${theme.fg("accent", "Tip:")} Integrate with your GitHub repos and add MCPs to power your agents at https://control.magicmtn.ai/`;
+      const tip = `   ${theme.fg("accent", "Tip:")} Connect your GitHub and MCPs at https://control.magicmtn.ai/`;
       const tipText = new Text(tip, 0, 0);
       let measuring = false;
       const widget = {
