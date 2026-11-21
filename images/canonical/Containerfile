@@ -13,15 +13,35 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
     && ln -sf "../@anthropic-ai/claude-code-linux-$claude_arch-musl/claude" node_modules/.bin/claude \
     && rm -rf node_modules/@opencode/cli-linux-*
 
-FROM docker.io/library/node:24.22.3-alpine3.24@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
+# npm 11.21.3 still bundles affected versions of glob and minimatch.
+RUN npm install --global npm@11.21.3 --ignore-scripts --no-audit --no-fund \
+    && cd /usr/local/lib/node_modules/npm \
+    && printf 'prefix=/usr/local\n' >> npmrc \
+    && glob_version=$(node -p 'require("/opt/pi/package.json").dependencies.glob') \
+    && minimatch_version=$(node -p 'require("/opt/pi/package.json").dependencies.minimatch') \
+    && npm pkg set "dependencies.glob=$glob_version" "dependencies.minimatch=$minimatch_version" \
+    && for package in @npmcli/map-workspaces @npmcli/package-json cacache; do \
+        npm pkg set --prefix "node_modules/$package" "dependencies.glob=$glob_version" || exit 1; \
+    done \
+    && for package in @npmcli/arborist @npmcli/map-workspaces @tufjs/models ignore-walk libnpmdiff; do \
+        npm pkg set --prefix "node_modules/$package" "dependencies.minimatch=$minimatch_version" || exit 1; \
+    done \
+    && cd node_modules \
+    && rm -rf glob minimatch path-scurry \
+    && cp -R /opt/pi/node_modules/glob /opt/pi/node_modules/minimatch /opt/pi/node_modules/path-scurry . \
+    && mkdir -p @isaacs \
+    && cp -R /opt/pi/node_modules/@isaacs/nonrecursive-glob-match @isaacs/
+
+FROM docker.io/library/alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 LABEL org.opencontainers.image.source="https://github.com/UseMagicMtn/magicmtn" \
       org.opencontainers.image.title="MagicMtn canonical sandbox" \
       org.opencontainers.image.description="Alpine sandbox with Python, Pi, Codex, Claude Code, OpenCode, Jujutsu, and GitHub CLI" \
       org.opencontainers.image.version="0.1.0"
 # Existing provider commands use /workspace as their guest working directory.
+# Alpine's Node links to the system OpenSSL and picks up apk security updates.
 RUN apk upgrade --no-cache \
-    && apk add --no-cache bash ca-certificates curl fd git github-cli jujutsu python3 py3-pip ripgrep tini \
-    && npm install --global npm@11.21.3 --ignore-scripts --no-audit --no-fund \
+    && apk add --no-cache bash ca-certificates curl fd git github-cli icu-data-full jujutsu nodejs python3 py3-pip ripgrep tini \
+        'libcrypto3>=3.5.9-r1' 'libssl3>=3.5.9-r1' \
     && addgroup -g 10001 sandbox \
     && adduser -D -u 10001 -G sandbox -s /bin/bash sandbox \
     && mkdir -p /computer /opt/venv \
@@ -30,7 +50,16 @@ RUN apk upgrade --no-cache \
     && chown -R sandbox:sandbox /computer /opt/venv
 COPY runtime /opt/magicmtn/runtime
 COPY --from=pi /opt/pi /opt/pi
-RUN ln -s /opt/pi/node_modules/.bin/pi /usr/local/bin/pi \
+COPY --from=pi /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+COPY --from=pi /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/corepack
+COPY --from=pi /opt/yarn-v1.22.22 /opt/yarn-v1.22.22
+RUN ln -s /usr/bin/node /usr/local/bin/node \
+    && ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
+    && ln -s /opt/yarn-v1.22.22/bin/yarn /usr/local/bin/yarn \
+    && ln -s yarn /usr/local/bin/yarnpkg \
+    && ln -s /opt/pi/node_modules/.bin/pi /usr/local/bin/pi \
     && ln -s /opt/pi/node_modules/.bin/codex /usr/local/bin/codex \
     && ln -s /opt/pi/node_modules/.bin/claude /usr/local/bin/claude \
     && ln -s /opt/pi/node_modules/.bin/opencode /usr/local/bin/opencode \

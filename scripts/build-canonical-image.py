@@ -66,6 +66,20 @@ test -w "$HOME"
 python -c 'import ssl, sqlite3, venv; print("Python", __import__("sys").version.split()[0])'
 python -m pip --version
 node --version
+ldd "$(command -v node)" > /tmp/node-libraries.txt
+grep -q 'libcrypto\.so\.3 =>' /tmp/node-libraries.txt
+grep -q 'libssl\.so\.3 =>' /tmp/node-libraries.txt
+npm --version
+npx --version
+npm ls --global --all > /dev/null
+node -e '
+  const assert = require("node:assert/strict");
+  const npm = require("node:module").createRequire(process.argv[1] + "/npm/package.json");
+  const pins = require("/opt/pi/package.json").dependencies;
+  for (const name of ["glob", "minimatch"]) {
+    assert.equal(npm(`${name}/package.json`).version, pins[name]);
+  }
+' "$(npm root --global)"
 node --check /opt/magicmtn/runtime/errors.js
 node --check /opt/magicmtn/runtime/error-worker.js
 pi --version
