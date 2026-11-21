@@ -74,3 +74,14 @@ jobs:
           path: sdk/rust/magicmtn-sdk/src/canonical-image.json
           if-no-files-found: error
           retention-days: 14
+      - name: Register the verified amd64 release with MagicMtn Cloud
+        env:
+          PUBLICATION_TOKEN: ${{ secrets.CANONICAL_PUBLICATION_TOKEN }}
+        run: |
+          set -eu
+          test -n "$PUBLICATION_TOKEN"
+          jq -ce --argjson run "$GITHUB_RUN_NUMBER" --argjson attempt "$GITHUB_RUN_ATTEMPT" '{publication_sequence:($run*1000000+$attempt),digest:.manifests["linux/amd64"]}' \
+            sdk/rust/magicmtn-sdk/src/canonical-image.json | \
+            curl --fail-with-body --retry 4 --retry-all-errors --max-time 30 \
+              -H "Authorization: Bearer $PUBLICATION_TOKEN" -H 'Content-Type: application/json' \
+              --data-binary @- https://api.magicmtn.ai/v1/canonical/publications

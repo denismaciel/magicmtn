@@ -80,6 +80,17 @@ pub trait SandboxPolicy: Send + Sync {
     ) -> PolicyFuture<'a> {
         Box::pin(async { Ok(()) })
     }
+    /// Resolve a provider-native image for an explicit immutable template.
+    fn prepared_resource<'a>(
+        &'a self,
+        _pool: &'a PgPool,
+        _binding: &'a crate::provider_connections::Binding,
+        _reference: &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Option<String>, ApiError>> + Send + 'a>,
+    > {
+        Box::pin(async { Ok(None) })
+    }
     fn authorize<'a>(
         &'a self,
         _pool: &'a PgPool,
@@ -220,9 +231,20 @@ async fn create(
 // other sandbox. Their immutable launch selections are saved before dispatch.
 pub async fn create_record(
     s: impl Into<ServiceState>,
+    body: Create,
+    workspace: Option<Value>,
+    policy: &dyn SandboxPolicy,
+) -> Result<Value, (StatusCode, String)> {
+    create_record_with_image(s, body, workspace, policy, None).await
+}
+
+/// Trusted hosts can pin a provider-native artifact prepared for the selected connection.
+pub async fn create_record_with_image(
+    s: impl Into<ServiceState>,
     mut body: Create,
     workspace: Option<Value>,
     policy: &dyn SandboxPolicy,
+    prepared: Option<crate::provider_connections::PreparedImage>,
 ) -> Result<Value, (StatusCode, String)> {
     let s = s.into();
     let id = body.idempotency_key.unwrap_or_else(Uuid::new_v4);
@@ -284,6 +306,32 @@ pub async fn create_record(
     if let Some(workspace) = &workspace {
         metadata[snapshot_key] = workspace.clone();
     }
+    let prepared = match (
+        &s.store,
+        &workspace,
+        prepared,
+        body.template.strip_prefix("image:"),
+    ) {
+        (Store::Postgres(pool), None, None, Some(reference)) => policy
+            .prepared_resource(pool, &binding, reference)
+            .await?
+            .map(|resource| crate::provider_connections::PreparedImage {
+                connection_id: binding.connection_id,
+                generation: binding.generation,
+                reference: reference.to_owned(),
+                resource,
+            }),
+        (_, _, prepared, _) => prepared,
+    };
+    if let Some(image) = &prepared {
+        if image.connection_id != binding.connection_id
+            || image.generation != binding.generation
+            || body.template != format!("image:{}", image.reference)
+        {
+            return Err(invalid("prepared image does not match sandbox binding"));
+        }
+        metadata["_magicmtn_prepared_resource"] = json!(image.resource);
+    }
     let user = policy.user_id();
     let ttl_seconds = policy.ttl_seconds(&binding.pin.name)?;
     s.store
@@ -313,7 +361,7 @@ pub async fn create_record(
         #[cfg(feature = "sqlite")]
         Store::Sqlite(_) => {}
     }
-    let result = crate::provider_connections::dispatch_store(
+    let result = crate::provider_connections::dispatch_with_image(
         &s.store,
         &s.registry,
         &binding,
@@ -323,7 +371,10 @@ pub async fn create_record(
             ttl_seconds: Some(ttl_seconds),
         },
         Duration::from_secs(120),
-        false,
+        crate::provider_connections::DispatchOptions {
+            cleanup: false,
+            image: prepared.as_ref(),
+        },
     )
     .await;
     let mut sandbox = match result {

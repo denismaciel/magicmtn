@@ -967,7 +967,44 @@ pub async fn dispatch_store(
     timeout: Duration,
     cleanup: bool,
 ) -> anyhow::Result<ProviderValue> {
-    store.validate_binding(binding, cleanup).await?;
+    dispatch_with_image(
+        store,
+        registry,
+        binding,
+        scope,
+        operation,
+        timeout,
+        DispatchOptions {
+            cleanup,
+            image: None,
+        },
+    )
+    .await
+}
+
+/// A host-verified image overrides only the exact reference used by this create.
+pub struct PreparedImage {
+    pub connection_id: Uuid,
+    pub generation: i64,
+    pub reference: String,
+    pub resource: String,
+}
+
+pub(crate) struct DispatchOptions<'a> {
+    pub cleanup: bool,
+    pub image: Option<&'a PreparedImage>,
+}
+
+pub(crate) async fn dispatch_with_image(
+    store: &crate::sandbox_storage::Store,
+    registry: &Registry,
+    binding: &Binding,
+    scope: &str,
+    operation: Operation,
+    timeout: Duration,
+    options: DispatchOptions<'_>,
+) -> anyhow::Result<ProviderValue> {
+    store.validate_binding(binding, options.cleanup).await?;
     ensure!(
         binding.manifest.capabilities.supports(&operation),
         "unsupported provider operation"
@@ -1005,7 +1042,16 @@ pub async fn dispatch_store(
                 .map_err(Into::into);
         }
     }
-    let result = dispatch_once(store, registry, binding, scope, operation, timeout).await;
+    let result = dispatch_once(
+        store,
+        registry,
+        binding,
+        scope,
+        operation,
+        timeout,
+        options.image,
+    )
+    .await;
     if let Some(kind) = kind {
         store
             .finish_receipt(binding, scope, kind, result.as_ref().ok().map(|v| json!(v)))
@@ -1021,6 +1067,7 @@ async fn dispatch_once(
     scope: &str,
     operation: Operation,
     timeout: Duration,
+    prepared: Option<&PreparedImage>,
 ) -> anyhow::Result<ProviderValue> {
     if binding.runner_id.is_some() {
         match store {
@@ -1032,7 +1079,24 @@ async fn dispatch_once(
             _ => anyhow::bail!("local connections cannot use remote runners"),
         }
     }
-    let environment = environment(binding)?;
+    let mut environment = environment(binding)?;
+    if let Some(image) = prepared {
+        ensure!(
+            matches!(&operation, Operation::SandboxCreate { template, .. }
+            if template.strip_prefix("image:").and_then(|s| s.split_once('|')).map(|(r, _)| r) == Some(image.reference.as_str())),
+            "prepared image does not match request"
+        );
+        let key = match binding.pin.name.as_str() {
+            "modal" => "MAGICMTN_MODAL_PREPARED_IMAGES",
+            "e2b" => "MAGICMTN_E2B_TEMPLATES",
+            "boat" => "MAGICMTN_BOAT_SNAPSHOTS",
+            _ => anyhow::bail!("unsupported prepared image provider"),
+        };
+        environment.values.insert(
+            key.into(),
+            json!({&image.reference: &image.resource}).to_string(),
+        );
+    }
     // Scope includes immutable connection generation to avoid cross-account clients.
     let scope = format!("{scope}:{}:{}", binding.connection_id, binding.generation);
     registry

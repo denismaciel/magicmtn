@@ -46,6 +46,12 @@ pub enum Commands {
         /// Explicitly connected Pi inference profile (credentials stay in the gateway)
         #[arg(long)]
         pi_connection: Option<Uuid>,
+        /// Require a specific verified Canonical revision
+        #[arg(long)]
+        canonical_revision: Option<i64>,
+        /// Select an enabled sandbox connection in the workspace
+        #[arg(long)]
+        sandbox_connection_id: Option<Uuid>,
         /// UUID for this creation request (generated automatically if omitted).
         /// Reuse it only to inspect/recover the same creation request.
         #[arg(long, value_name = "UUID")]
@@ -190,14 +196,24 @@ pub async fn run(api: &Api, command: Commands) -> Result<()> {
         Commands::Create {
             model,
             pi_connection,
+            canonical_revision,
+            sandbox_connection_id,
             idempotency_key,
         } => {
             let key = idempotency_key.unwrap_or_else(Uuid::new_v4);
             eprintln!("Creating workspace {key}. If interrupted, inspect `magic pi list`; do not create a replacement blindly.");
+            let mut body =
+                json!({"model_id":model,"pi_connection_id":pi_connection,"idempotency_key":key});
+            if let Some(revision) = canonical_revision {
+                body["canonical_revision"] = json!(revision);
+            }
+            if let Some(connection) = sandbox_connection_id {
+                body["sandbox_connection_id"] = json!(connection);
+            }
             api.request(
                 Method::POST,
                 "v1/pi/workspaces",
-                Some(crate::configuration::creation_body(json!({"model_id":model,"pi_connection_id":pi_connection,"idempotency_key":key}))?),
+                Some(crate::configuration::creation_body(body)?),
             )
             .await?
         }
