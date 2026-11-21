@@ -44,9 +44,16 @@ if ! "$temporary/magic" --version; then
   printf 'Error: the downloaded CLI could not run; the existing installation has not been changed.\n' >&2
   exit 1
 fi
+# Treat a directory at the destination as an error instead of moving into it.
+if [ -d "$install_dir/magic" ]; then
+  printf 'Error: %s/magic is a directory.\n' "$install_dir" >&2
+  exit 1
+fi
 # Rename replaces an existing symlink without modifying its target.
 mv -f "$temporary/magic" "$install_dir/magic"
 printf '\nInstalled magic in %s\n' "$install_dir"
+curl -q -fsS --max-time 2 -o /dev/null -X POST \
+  -H 'X-MagicMtn-Installer: shell' https://magicmtn.ai/install-completed 2>/dev/null || :
 if [ "$modify_shell" != no ]; then
   if [ "$modify_shell" = yes ]; then
     set -- --yes

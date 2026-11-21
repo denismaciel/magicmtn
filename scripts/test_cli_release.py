@@ -134,7 +134,18 @@ class ReleaseTest(unittest.TestCase):
         tools = self.root / "checksum-tools"
         tools.mkdir()
         (tools / "uname").write_text('#!/bin/sh\n[ "$1" = -s ] && echo Linux || echo x86_64\n')
-        (tools / "curl").write_text('#!/bin/sh\ncase "$2" in *.sha256) cp "$FIXTURE_DIR/checksum" "$4";; *) cp "$FIXTURE_DIR/binary" "$4";; esac\n')
+        (tools / "curl").write_text(
+            '#!/bin/sh\n'
+            'case "$2" in\n'
+            '  *.sha256) cp "$FIXTURE_DIR/checksum" "$4";;\n'
+            '  */releases/*) cp "$FIXTURE_DIR/binary" "$4";;\n'
+            '  *)\n'
+            '    test "$*" = "-q -fsS --max-time 2 -o /dev/null -X POST -H X-MagicMtn-Installer: shell https://magicmtn.ai/install-completed" || exit 2\n'
+            '    cmp "$HOME/.local/bin/magic" "$FIXTURE_DIR/binary" || exit 2\n'
+            '    echo reported >> "$HOME/install-events"\n'
+            '    exit 22;;\n'
+            'esac\n'
+        )
         for tool in tools.iterdir():
             tool.chmod(0o755)
         script = self.root / "checksum-install.sh"
@@ -144,11 +155,19 @@ class ReleaseTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((target / "magic").read_bytes(), b"existing installation")
         self.assertFalse((home / "executed").exists())
+        self.assertFalse((home / "install-events").exists())
         (fixture / "binary").write_bytes(self.binary)
         (fixture / "checksum").write_text(hashlib.sha256(self.binary).hexdigest() + "  magic\n")
         result = subprocess.run(["sh", str(script), "--no-modify-shell"], env=env, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((target / "magic").read_bytes(), self.binary)
+        self.assertEqual((home / "install-events").read_text(), "reported\n")
+        (target / "magic").unlink()
+        (target / "magic").mkdir()
+        result = subprocess.run(["sh", str(script), "--no-modify-shell"], env=env, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(list((target / "magic").iterdir()), [])
+        self.assertEqual((home / "install-events").read_text(), "reported\n")
 
     def test_bootstrap_must_match_the_independent_application_deployment(self):
         for body, location in [(b"attacker", release.INSTALLER_URL), (release.render_installer(self.configuration).encode(), "https://untrusted.example/install.sh")]:
