@@ -304,7 +304,7 @@ export default function magicmtn(pi) {
           }
           ctx.ui.notify(`Connecting workspace ${workspace.id}. Ctrl+] returns here; the sandbox stays running.`, "info");
           const connected = await terminal(ctx, ["pi", "attach", workspace.id]);
-          ctx.ui.setStatus("magicmtn-workspace", `Local pi · disconnected from MagicMtn sandbox ${workspace.id.slice(0, 8)}`);
+          ctx.ui.setStatus("magicmtn-workspace", `Local pi · disconnected from MagicMtn computer ${workspace.id.slice(0, 8)}`);
           if (!connected) {
             const error = new Error(`Workspace connection ended with an error. Resume workspace ${workspace.id} through /magic.`);
             error.reported = true;

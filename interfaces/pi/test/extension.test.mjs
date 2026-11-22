@@ -204,7 +204,7 @@ test("creates the default workspace without selection menus and hands the termin
   await f.command.handler("new", f.ctx);
   assert.deepEqual(f.calls(), [["pi", "account"], ["pi", "catalog"], ["pi", "create", "--model", model.id], ["pi", "attach", workspace.id]]);
   assert.deepEqual(f.terminalEvents, ["stop", "start"]);
-  assert.match(f.statuses.get("magicmtn-workspace"), /Local pi.*disconnected from MagicMtn sandbox d215125b/);
+  assert.match(f.statuses.get("magicmtn-workspace"), /Local pi.*disconnected from MagicMtn computer d215125b/);
   assert.deepEqual(f.menus, []);
 });
 test("relay actions are rejected without provisioning or taking over the terminal", async (t) => {
@@ -336,7 +336,7 @@ test("inference-only registers a scoped provider without creating a VM", async (
   assert.match(f.statuses.get("magicmtn"), /local tools.*Model \(Fireworks\)/);
 });
 
-test("VM footer names its sandbox and follows inference model changes", (t) => {
+test("VM footer names its computer and follows inference model changes", (t) => {
   const previous = process.env.MAGICMTN_WORKSPACE_INFO;
   t.after(() => {
     if (previous === undefined) delete process.env.MAGICMTN_WORKSPACE_INFO;
@@ -348,7 +348,7 @@ test("VM footer names its sandbox and follows inference model changes", (t) => {
   let status;
   const ctx = { model: { id: model.id, name: "GLM 5.3 Flash", provider: "magicmtn" }, ui: { setStatus(_key, value) { status = value; } } };
   handlers.get("session_start")({}, ctx);
-  assert.equal(status, "MagicMtn · sandbox d215125b · GLM 5.3 Flash (MagicMtn)");
+  assert.equal(status, "MagicMtn · computer d215125b · GLM 5.3 Flash (MagicMtn)");
   ctx.model = { id: "another", name: "Direct model", provider: "anthropic" };
   handlers.get("model_select")({}, ctx);
   assert.match(status, /Direct model \(anthropic\)/);

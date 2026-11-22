@@ -89,7 +89,7 @@ export default function workspaceStatus(pi) {
     const inference = model
       ? `${model.name || model.id} (${providerLabel(model.provider === "magicmtn" ? "MagicMtn" : model.provider)})`
       : "inference not selected";
-    ctx.ui.setStatus("magicmtn", `MagicMtn · sandbox ${workspace.id.slice(0, 8)} · ${inference}`);
+    ctx.ui.setStatus("magicmtn", `MagicMtn · computer ${workspace.id.slice(0, 8)} · ${inference}`);
   };
   pi.on("session_start", (event, ctx) => {
     update(event, ctx);

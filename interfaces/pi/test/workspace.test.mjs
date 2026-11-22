@@ -67,7 +67,7 @@ function fixture(t, { mode = "tui", sandbox = true, rows = 40, initialText = "",
   } };
   const header = { render: () => [...Array(headerRows - 2).fill("Pi startup"), "[Extensions]", "  magicmtn-mcp, magicmtn-workspace"], invalidate() {} };
   const inputEditor = { render: (width) => editor.render(width), invalidate() {} };
-  const footer = { render: () => ["/workspace", "0.0%/33k", "MagicMtn · sandbox d215125b"], invalidate() {} };
+  const footer = { render: () => ["/workspace", "0.0%/33k", "MagicMtn · computer d215125b"], invalidate() {} };
   if (nested) {
     tui.addChild(new VStack([new ScrollView(header), new VStack([widgetContainer, inputEditor, footer])]));
   } else {
@@ -267,7 +267,7 @@ for (const role of ["user", "assistant"]) {
     const f = fixture(t, { entries: [{ type: "message", message: { role, content: "Existing conversation" } }] });
     assert.equal(f.widgets.size, 0);
     assert.equal(f.subscriptions(), 0);
-    assert.match(f.statuses.get("magicmtn"), /sandbox d215125b/);
+    assert.match(f.statuses.get("magicmtn"), /computer d215125b/);
   });
 }
 
@@ -336,7 +336,7 @@ test("session restart replaces the listener and shutdown removes it", (t) => {
 for (const mode of ["rpc", "json", "print"]) {
   test(`${mode} mode keeps the footer without installing a welcome or input hook`, (t) => {
     const f = fixture(t, { mode });
-    assert.match(f.statuses.get("magicmtn"), /sandbox d215125b/);
+    assert.match(f.statuses.get("magicmtn"), /computer d215125b/);
     assert.equal(f.widgets.size, 0);
     assert.equal(f.subscriptions(), 0);
   });
