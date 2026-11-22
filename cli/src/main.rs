@@ -958,22 +958,26 @@ async fn run(mut cli: Cli) -> Result<()> {
                 )
                 .await?;
             if std::io::stdout().is_terminal() {
-                println!(
-                    "{} sandbox {} ({})",
-                    if result["status"] == "ended" {
-                        "Terminated"
-                    } else {
-                        "Termination queued for"
-                    },
-                    text(&result, "id"),
-                    text(&result, "provider_id")
-                );
+                println!("{}", sandbox_termination_message(&result));
             } else {
                 println!("{}", text(&result, "id"));
             }
         }
     }
     Ok(())
+}
+
+fn sandbox_termination_message(result: &Value) -> String {
+    let action = if result["status"] == "ended" {
+        "Terminated"
+    } else {
+        "Termination queued for"
+    };
+    let id = text(result, "id");
+    match text(result, "provider_id") {
+        "" => format!("{action} sandbox {id}"),
+        provider_id => format!("{action} sandbox {id} ({provider_id})"),
+    }
 }
 
 fn confirm_sandbox_termination(
@@ -1050,6 +1054,31 @@ fn provider_install_accepts_one_source_and_rejects_the_retired_command() {
         vec!["magic", "sandbox", "create", "--image", "alpine"],
     ] {
         assert!(Cli::try_parse_from(args).is_err());
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn sandbox_termination_message_omits_empty_provider_id() {
+    let id = "11111111-1111-4111-8111-111111111111";
+    for (status, expected) in [
+        ("ended", format!("Terminated sandbox {id}")),
+        (
+            "terminating",
+            format!("Termination queued for sandbox {id}"),
+        ),
+    ] {
+        let mut result = json!({"id": id, "status": status});
+        assert_eq!(sandbox_termination_message(&result), expected);
+
+        result["provider_id"] = json!("");
+        assert_eq!(sandbox_termination_message(&result), expected);
+
+        result["provider_id"] = json!("provider-sandbox-1");
+        assert_eq!(
+            sandbox_termination_message(&result),
+            format!("{expected} (provider-sandbox-1)")
+        );
     }
 }
 
