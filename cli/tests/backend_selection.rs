@@ -80,7 +80,7 @@ fn computer_help_remains_available_without_sign_in() {
         let output = magic(&args, None);
         assert!(output.status.success());
         assert!(String::from_utf8_lossy(&output.stdout)
-            .contains("Manage standalone and session sandboxes"));
+            .contains("Manage standalone and session machines"));
         assert!(output.stderr.is_empty());
     }
 }

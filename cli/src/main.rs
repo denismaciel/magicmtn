@@ -168,7 +168,7 @@ enum Commands {
         #[command(subcommand)]
         command: ProviderCommands,
     },
-    /// Manage standalone and session sandboxes
+    /// Manage standalone and session machines
     #[command(arg_required_else_help = true, display_order = 2)]
     Computer {
         #[command(subcommand)]
