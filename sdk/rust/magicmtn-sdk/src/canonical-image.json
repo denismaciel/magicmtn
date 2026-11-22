@@ -1,7 +1,7 @@
 {
   "repository": "ghcr.io/usemagicmtn/canonical",
   "manifests": {
-    "linux/arm64": "sha256:040002de65e218dedab0fabfced60966943424a2323e8551f61ffe5742a8aaaa",
-    "linux/amd64": "sha256:6ba0b70aedaca24cd3bfdcc84d852839cd14b1813d2ad148d38711a91493a0a9"
+    "linux/arm64": "sha256:2fe0fd949c921879dac9913b924d0d83e158eb01789263c2a39f35aac5c3abad",
+    "linux/amd64": "sha256:4d3f557d3e8ae5005b61128bd84dc37389b3ec905593b882460f5ac3db8c331a"
   }
 }
