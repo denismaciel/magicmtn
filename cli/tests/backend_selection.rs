@@ -37,7 +37,7 @@ fn explicit_server_takes_precedence_over_environment() {
 
 #[test]
 fn local_selection_overrides_the_server_environment() {
-    let output = magic(&["--local", "sandbox", "list"], Some("not-a-url"));
+    let output = magic(&["--local", "computer", "list"], Some("not-a-url"));
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("magic server start"));
 }
@@ -71,11 +71,11 @@ fn organization_override_is_rejected() {
 }
 
 #[test]
-fn sandbox_help_remains_available_without_sign_in() {
+fn computer_help_remains_available_without_sign_in() {
     for args in [
         vec!["help"],
-        vec!["help", "sandbox"],
-        vec!["sandbox", "--help"],
+        vec!["help", "computer"],
+        vec!["computer", "--help"],
     ] {
         let output = magic(&args, None);
         assert!(output.status.success());
@@ -83,6 +83,13 @@ fn sandbox_help_remains_available_without_sign_in() {
             .contains("Manage standalone and session sandboxes"));
         assert!(output.stderr.is_empty());
     }
+}
+
+#[test]
+fn sandbox_command_is_rejected() {
+    let output = magic(&["sandbox", "list"], None);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unrecognized subcommand 'sandbox'"));
 }
 
 #[test]

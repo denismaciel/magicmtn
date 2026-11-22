@@ -170,9 +170,9 @@ enum Commands {
     },
     /// Manage standalone and session sandboxes
     #[command(arg_required_else_help = true, display_order = 2)]
-    Sandbox {
+    Computer {
         #[command(subcommand)]
-        command: SandboxCommands,
+        command: ComputerCommands,
     },
     /// Generate and install shell completions (detect the shell if omitted)
     #[command(display_order = 1000)]
@@ -236,7 +236,7 @@ enum ProviderCommands {
 }
 
 #[derive(Subcommand)]
-enum SandboxCommands {
+enum ComputerCommands {
     /// Create a managed sandbox, or use an explicit provider image
     New {
         #[arg(long)]
@@ -814,12 +814,12 @@ async fn run(mut cli: Cli) -> Result<()> {
         Commands::Agents { command } => return agents::run(&api, command).await,
         _ => (),
     }
-    let Commands::Sandbox { command } = command else {
+    let Commands::Computer { command } = command else {
         unreachable!()
     };
     use reqwest::Method;
     match command {
-        SandboxCommands::New {
+        ComputerCommands::New {
             image,
             model,
             pi_connection,
@@ -868,7 +868,7 @@ async fn run(mut cli: Cli) -> Result<()> {
             }
             println!("{id}");
         }
-        SandboxCommands::Exec {
+        ComputerCommands::Exec {
             id,
             timeout_ms,
             command,
@@ -883,7 +883,7 @@ async fn run(mut cli: Cli) -> Result<()> {
                 "sandbox command failed or timed out"
             );
         }
-        SandboxCommands::Ssh { id } => {
+        ComputerCommands::Ssh { id } => {
             validate_id(&id)?;
             if local {
                 sandbox_shell::run(&api, &id).await?;
@@ -891,8 +891,8 @@ async fn run(mut cli: Cli) -> Result<()> {
                 pi::sandbox_shell(&api, &id).await?;
             }
         }
-        SandboxCommands::Scp { id, file } => sandbox_scp::run(&api, &id, &file).await?,
-        SandboxCommands::List { all } => {
+        ComputerCommands::Scp { id, file } => sandbox_scp::run(&api, &id, &file).await?,
+        ComputerCommands::List { all } => {
             let result = api.request(Method::GET, "v1/sandboxes", None).await?;
             let items: Vec<_> = result
                 .as_array()
@@ -903,7 +903,7 @@ async fn run(mut cli: Cli) -> Result<()> {
                 .collect();
             print_list(&items);
         }
-        SandboxCommands::Show { id, format } => {
+        ComputerCommands::Show { id, format } => {
             validate_id(&id)?;
             let result = api
                 .request(Method::GET, &format!("v1/sandboxes/{id}"), None)
@@ -939,7 +939,7 @@ async fn run(mut cli: Cli) -> Result<()> {
                 }
             }
         }
-        SandboxCommands::Terminate { id, yes } => {
+        ComputerCommands::Terminate { id, yes } => {
             validate_id(&id)?;
             if !yes {
                 anyhow::ensure!(
@@ -1032,15 +1032,21 @@ fn provider_install_accepts_one_source_and_rejects_the_retired_command() {
         ],
         vec![
             "magic",
-            "sandbox",
+            "computer",
             "local-install",
             "--file",
             "provider.tar.gz",
         ],
-        vec!["magic", "sandbox", "local-run", "--catalog", "catalog.json"],
         vec![
             "magic",
-            "sandbox",
+            "computer",
+            "local-run",
+            "--catalog",
+            "catalog.json",
+        ],
+        vec![
+            "magic",
+            "computer",
             "local",
             "--connection",
             "11111111-1111-4111-8111-111111111111",
@@ -1055,7 +1061,7 @@ fn provider_install_accepts_one_source_and_rejects_the_retired_command() {
             "1.0.0",
         ],
         vec!["magic", "internal-provider-runner"],
-        vec!["magic", "sandbox", "create", "--image", "alpine"],
+        vec!["magic", "computer", "create", "--image", "alpine"],
     ] {
         assert!(Cli::try_parse_from(args).is_err());
     }

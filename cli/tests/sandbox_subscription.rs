@@ -115,7 +115,7 @@ async fn sandbox_uses_server_access_even_with_missing_or_stale_cached_plan() {
             vec!["terminate", organization, "--yes"],
         ] {
             let output = Command::new(env!("CARGO_BIN_EXE_magic"))
-                .args(["--server-url", &base, "sandbox"])
+                .args(["--server-url", &base, "computer"])
                 .args(&args)
                 .env("HOME", home.path())
                 .env_remove("MAGICMTN_CA_CERT")

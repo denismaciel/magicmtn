@@ -114,7 +114,7 @@ export default Plugin.define({
           const operation = await choose(`Sandbox ${id.slice(0, 8)}`, options);
           if (!operation) return;
           if (operation === "attach") {
-            await connect(local ? ["--local", "sandbox", "ssh", id] : ["opencode", "attach", id]);
+            await connect(local ? ["--local", "computer", "ssh", id] : ["opencode", "attach", id]);
           } else if (await dialog.confirm({
             title: options.find(([value]) => value === operation)[1],
             message: operation === "terminate" ? `Delete sandbox ${id} and its workspace files?` : `Apply this action to sandbox ${id}?`,

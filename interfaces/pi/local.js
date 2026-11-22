@@ -51,7 +51,7 @@ export async function localMenu(action, ctx, request, terminal) {
   const sandbox = sandboxes.find((item) => selection.startsWith(item.id));
   if (!sandbox) return;
   const operation = await ctx.ui.select(`Sandbox ${sandbox.id}`, ["Open shell", "Terminate"]);
-  if (operation === "Open shell") await terminal(ctx, ["--local", "sandbox", "ssh", sandbox.id]);
+  if (operation === "Open shell") await terminal(ctx, ["--local", "computer", "ssh", sandbox.id]);
   if (operation === "Terminate" && await ctx.ui.confirm("Terminate sandbox", `Delete sandbox ${sandbox.id} and its files?`)) {
     await call("sandbox_terminate", { id: sandbox.id });
     ctx.ui.notify(`Terminated sandbox ${sandbox.id}.`, "info");

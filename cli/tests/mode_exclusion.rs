@@ -63,7 +63,7 @@ fn running_server_blocks_login_and_stop_releases_locks() {
     assert_eq!(account["mode"], "local");
     assert_eq!(account["signed_in"], false);
     let list = magic(home.path())
-        .args(["sandbox", "list"])
+        .args(["computer", "list"])
         .output()
         .unwrap();
     assert!(

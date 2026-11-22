@@ -138,7 +138,7 @@ async fn copy(contents: &[u8], fail_transfer: bool) -> anyhow::Result<()> {
         json!({"server":base,"token":"upload-session"}).to_string(),
     )?;
     let output = Command::new(env!("CARGO_BIN_EXE_magic"))
-        .args(["--server-url", &base, "sandbox", "scp", "11111111"])
+        .args(["--server-url", &base, "computer", "scp", "11111111"])
         .arg(&source)
         .env("HOME", home.path())
         .env_remove("MAGICMTN_CA_CERT")

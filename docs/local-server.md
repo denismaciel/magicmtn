@@ -42,12 +42,12 @@ Starting the server selects local mode for the CLI and Pi extension. Commands us
 In another terminal, create a sandbox with a small Alpine image, run a command, and clean up.
 
 ```sh
-sandbox_id=$(magic --local sandbox new --image alpine:3.24.1)
-magic --local sandbox exec "$sandbox_id" -- /bin/echo "hello from the sandbox"
-magic --local sandbox terminate "$sandbox_id" --yes
+sandbox_id=$(magic --local computer new --image alpine:3.24.1)
+magic --local computer exec "$sandbox_id" -- /bin/echo "hello from the sandbox"
+magic --local computer terminate "$sandbox_id" --yes
 ```
 
-To use the bundled Canonical image, run `magic --local sandbox new`. Use `magic --local images list` to list available images and `magic --local sandbox list` to list running sandboxes. To inspect a specific sandbox, run `magic --local sandbox show SANDBOX_ID --format json`.
+To use the bundled Canonical image, run `magic --local computer new`. Use `magic --local images list` to list available images and `magic --local computer list` to list running sandboxes. To inspect a specific sandbox, run `magic --local computer show SANDBOX_ID --format json`.
 
 Apple Container sandboxes use an isolated network by default. The host pulls sandbox images as needed. A custom image reference can use a registry tag or an immutable digest.
 
@@ -69,7 +69,7 @@ Run `magic server stop` or press Ctrl+C in the server terminal, then run `magic 
 Delete a sandbox and its files when finished:
 
 ```sh
-magic sandbox terminate <ID> --yes
+magic computer terminate <ID> --yes
 ```
 
 Sandboxes have a 24-hour default lifetime. Set `magic server start --ttl-seconds SECONDS` to choose a lifetime between 1 second and 24 hours for new sandboxes. The lifecycle worker cleans up expired sandboxes while the server is running and resumes that work after restart.

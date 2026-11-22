@@ -50,7 +50,7 @@ class TerminalTest(unittest.TestCase):
         self.run_terminal(["pi", "attach", "2240676a-44f4-4d55-8790-f659af72074a"], "/v1/pi/workspaces/2240676a-44f4-4d55-8790-f659af72074a")
 
     def test_sandbox_ssh_input_resize_detach_and_restore(self):
-        self.run_terminal(["sandbox", "ssh", "2240676a"], "/v1/sandboxes/2240676a")
+        self.run_terminal(["computer", "ssh", "2240676a"], "/v1/sandboxes/2240676a")
 
     def run_terminal(self, command, expected_path):
         binary = str(pathlib.Path(os.environ["MAGICMTN_TEST_MAGIC"]).resolve())

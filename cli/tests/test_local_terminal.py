@@ -90,7 +90,7 @@ for line in sys.stdin:
                 os.setsid()
                 fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
-            process = subprocess.Popen([binary, "--local", "sandbox", "ssh", "2240676a"],
+            process = subprocess.Popen([binary, "--local", "computer", "ssh", "2240676a"],
                 stdin=slave, stdout=slave, stderr=slave, preexec_fn=controlling_terminal,
                 env=dict(os.environ, HOME=directory, MAGICMTN_CONFIG_DIRECTORY=directory,
                          MAGICMTN_LOCAL_DIRECTORY=directory, OPENAI_API_KEY="must-not-reach-provider"))

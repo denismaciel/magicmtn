@@ -39,7 +39,7 @@ The publisher validates the archives and source hashes before uploading. It writ
 
 ## Custom images and providers
 
-`magic sandbox new --image REFERENCE` passes the user's selection to the provider. Explicit selections bypass Canonical setup. Apple Container owns registry authentication, downloads, and storage for custom OCI images.
+`magic computer new --image REFERENCE` passes the user's selection to the provider. Explicit selections bypass Canonical setup. Apple Container owns registry authentication, downloads, and storage for custom OCI images.
 
 Firecracker owns prepared VM root filesystems and its image mapping through `MAGICMTN_FIRECRACKER_IMAGES`; map the Canonical reference to a prepared VM image to select it on that provider. `magic images list` shows the local provider's inventory.
 

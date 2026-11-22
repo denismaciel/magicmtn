@@ -61,14 +61,14 @@ class DefaultsTest(unittest.TestCase):
                     return json.loads(result.stdout) if success else None
 
                 call("defaults", "--model", other_model)
-                result = subprocess.run([binary, "--server-url", base, "sandbox", "new"],
+                result = subprocess.run([binary, "--server-url", base, "computer", "new"],
                                         env=dict(os.environ, HOME=home), capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(server.created["model_id"], other_model)
                 sandbox_id = server.created["idempotency_key"]
                 self.assertEqual(result.stdout, sandbox_id + "\n")
                 self.assertEqual(result.stderr, "")
-                result = subprocess.run([binary, "--server-url", base, "sandbox", "new", "--image", "alpine"],
+                result = subprocess.run([binary, "--server-url", base, "computer", "new", "--image", "alpine"],
                                         env=dict(os.environ, HOME=home), capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 sandbox_id = server.created["idempotency_key"]
@@ -77,7 +77,7 @@ class DefaultsTest(unittest.TestCase):
                 if fish := shutil.which("fish"):
                     result = subprocess.run(
                         [fish, "--no-config", "-c",
-                         '"$argv[1]" --server-url "$argv[2]" sandbox new | read -x devbox; printenv devbox',
+                         '"$argv[1]" --server-url "$argv[2]" computer new | read -x devbox; printenv devbox',
                          binary, base],
                         env=dict(os.environ, HOME=home), capture_output=True, text=True,
                     )
@@ -106,7 +106,7 @@ class DefaultsTest(unittest.TestCase):
                 self.assertEqual(connected.returncode, 0, connected.stderr)
                 call("defaults", "--model", model)
                 call("defaults", "--use-pi")
-                result = subprocess.run([binary, "--server-url", base, "sandbox", "new"],
+                result = subprocess.run([binary, "--server-url", base, "computer", "new"],
                                         env=dict(os.environ, HOME=home), capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(server.created["pi_connection_id"], "00000000-0000-4000-8000-000000000009")

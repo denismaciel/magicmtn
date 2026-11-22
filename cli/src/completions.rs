@@ -88,7 +88,7 @@ mod tests {
                     "pi",
                     "agents",
                     "provider",
-                    "sandbox",
+                    "computer",
                     "completion",
                 ],
             ),
@@ -100,7 +100,7 @@ mod tests {
                     "pi",
                     "agents",
                     "provider",
-                    "sandbox",
+                    "computer",
                     "completion",
                 ],
             ),
@@ -114,7 +114,11 @@ mod tests {
                 "magic help pi ",
                 vec!["install", "defaults", "attach", "create"],
             ),
-            ("magic sandbox show --format ", vec!["human", "json"]),
+            (
+                "magic computer ",
+                vec!["new", "exec", "ssh", "scp", "list", "show", "terminate"],
+            ),
+            ("magic computer show --format ", vec!["human", "json"]),
         ] {
             let output = Process::new("fish").args([
                 "--no-config", "-c",
@@ -139,6 +143,10 @@ mod tests {
             assert!(
                 !candidates.contains(&"plan"),
                 "{line}: retired plan command appeared in completions"
+            );
+            assert!(
+                !candidates.contains(&"sandbox"),
+                "{line}: retired sandbox command appeared in completions"
             );
             for value in expected {
                 assert!(
