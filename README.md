@@ -7,7 +7,13 @@
 
 # MagicMtn
 
-Run coding agents in isolated workspaces with MagicMtn's CLI, sandbox engine, and provider SDK.
+Distributed inference and sandboxed compute platform for agents. The open-source edition of MagicMtn Cloud that runs on your own infrastructure.
+
+- **Inference** — Run agent workloads with models from providers such as Amazon Bedrock, SageMaker, and Ollama.
+- **Sandboxed compute** — Run agent commands in isolated environments, from Apple Container on a Mac to microVMs on Linux or AWS.
+- **CLI** — Use `magic` to manage sandboxes, execute commands, and install providers.
+- **Provider SDK** — Build and package your own inference or compute providers in Rust.
+- **Agent integrations** — Connect Pi and OpenCode to MagicMtn workspaces, or expose sandbox tools to other MCP clients.
 
 ## Install from source
 
