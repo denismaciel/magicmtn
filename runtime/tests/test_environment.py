@@ -147,6 +147,7 @@ class EnvironmentTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Sandbox parity verified.", result.stdout)
             self.assertNotIn("Failed to load extension", result.stderr)
+            self.assertNotIn("No project session found with id", result.stderr)
         self.assertEqual(len(calls), 4)
         for path, authorization, body in calls:
             self.assertEqual(path, "/v1/harness/agent/chat/completions")

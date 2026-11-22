@@ -184,6 +184,20 @@ class SupervisorTests(unittest.TestCase):
         self.assertEqual(self.supervisor.harness.command()[1:3],
                          ["--session", str(sessions / "conversation.jsonl")])
 
+    def test_new_pi_session_opens_the_allocated_id_without_lookup(self):
+        harness = self.supervisor.harness
+        self.assertEqual(list(harness.artifacts()), [])
+        command = harness.command()
+        session_file, = harness.artifacts()
+        self.assertEqual(command[1:3], ["--session", str(session_file)])
+        header = json.loads(session_file.read_text())
+        self.assertEqual(header["type"], "session")
+        self.assertEqual(header["id"], self.supervisor.id)
+        self.assertEqual(header["cwd"], os.path.realpath(self.directory.name))
+        self.assertEqual(session_file.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(harness.command(), command)
+        self.assertEqual(json.loads(session_file.read_text()), header)
+
     @unittest.skipUnless(os.environ.get("MAGICMTN_TEST_PI"), "set MAGICMTN_TEST_PI to pinned Pi 1.2 executable")
     def test_real_pi_tool_loop_history_resume_and_async_sync(self):
         self.run_real_pi_loop()

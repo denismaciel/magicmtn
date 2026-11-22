@@ -1,4 +1,5 @@
 """Pi 1.2 adapter; no agent loop is implemented by MagicMtn."""
+import datetime
 import json
 import os
 import pathlib
@@ -8,6 +9,7 @@ class PiHarness:
     def __init__(self, directory, config, session_id, atomic_json):
         self.config = config
         self.id = session_id
+        self.atomic_json = atomic_json
         self.directory = directory / "pi"
         self.directory.mkdir(exist_ok=True, mode=0o700)
         self.sessions = self.directory / "sessions"
@@ -52,8 +54,23 @@ class PiHarness:
         files = list(self.sessions.glob("*.jsonl"))
         if len(files) > 1:
             raise RuntimeError("ambiguous Pi session files; operator recovery required")
-        selector = ["--session", str(files[0])] if files else ["--session-id", self.id, "--session-dir", str(self.sessions)]
-        return ["pi", *selector, "--approve", "--provider", "magicmtn", "--model", self.config["model"]["id"]]
+        if files:
+            session_file = files[0]
+        else:
+            # Seed Pi's JSONL header so it can open the allocated ID without a lookup warning.
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds")
+            timestamp = timestamp.replace("+00:00", "Z")
+            filename_timestamp = timestamp.replace(":", "-").replace(".", "-")
+            self.sessions.mkdir(exist_ok=True, mode=0o700)
+            session_file = self.sessions / f"{filename_timestamp}_{self.id}.jsonl"
+            self.atomic_json(session_file, {
+                "type": "session",
+                "version": 3,
+                "id": self.id,
+                "timestamp": timestamp,
+                "cwd": os.path.realpath(self.config.get("workspace", "/workspace")),
+            })
+        return ["pi", "--session", str(session_file), "--approve", "--provider", "magicmtn", "--model", self.config["model"]["id"]]
 
     def environment(self):
         values = {"PI_CODING_AGENT_DIR": str(self.directory)}
