@@ -34,6 +34,7 @@ async fn sandbox_uses_server_access_even_with_missing_or_stale_cached_plan() {
                     return Json(json!({"scope":{"organization_id":"11111111-1111-4111-8111-111111111111","user_id":"22222222-2222-4222-8222-222222222222"},"defaults":{"model_id":"33333333-3333-4333-8333-333333333333"}})).into_response();
                 }
                 assert_eq!(request.headers()["authorization"], "Bearer test-session");
+                let mut response = json!([]);
                 if request.method() == axum::http::Method::POST
                     && matches!(
                         request.uri().path(),
@@ -48,6 +49,7 @@ async fn sandbox_uses_server_access_even_with_missing_or_stale_cached_plan() {
                     assert!(
                         uuid::Uuid::parse_str(body["idempotency_key"].as_str().unwrap()).is_ok()
                     );
+                    response = json!({"id": body["idempotency_key"]});
                     if managed {
                         assert!(body.get("template").is_none());
                         assert!(body.get("provider").is_none());
@@ -67,7 +69,7 @@ async fn sandbox_uses_server_access_even_with_missing_or_stale_cached_plan() {
                 }
                 recorded.fetch_add(1, Ordering::SeqCst);
                 if backend_allowed {
-                    Json(json!([])).into_response()
+                    Json(response).into_response()
                 } else {
                     (
                         StatusCode::FORBIDDEN,

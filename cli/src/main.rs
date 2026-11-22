@@ -861,7 +861,11 @@ async fn run(mut cli: Cli) -> Result<()> {
             };
             let result = api.request(Method::POST, route, Some(body)).await?;
             let id = text(&result, "id");
-            eprintln!("Sandbox {id} created successfully");
+            uuid::Uuid::parse_str(id)
+                .context("sandbox creation response did not contain a valid sandbox ID")?;
+            if std::io::stdout().is_terminal() {
+                eprintln!("Sandbox {id} created successfully");
+            }
             println!("{id}");
         }
         SandboxCommands::Exec {

@@ -4,6 +4,7 @@ import http.server
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -66,13 +67,23 @@ class DefaultsTest(unittest.TestCase):
                 self.assertEqual(server.created["model_id"], other_model)
                 sandbox_id = server.created["idempotency_key"]
                 self.assertEqual(result.stdout, sandbox_id + "\n")
-                self.assertEqual(result.stderr, f"Sandbox {sandbox_id} created successfully\n")
+                self.assertEqual(result.stderr, "")
                 result = subprocess.run([binary, "--server-url", base, "sandbox", "new", "--image", "alpine"],
                                         env=dict(os.environ, HOME=home), capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 sandbox_id = server.created["idempotency_key"]
                 self.assertEqual(result.stdout, sandbox_id + "\n")
-                self.assertEqual(result.stderr, f"Sandbox {sandbox_id} created successfully\n")
+                self.assertEqual(result.stderr, "")
+                if fish := shutil.which("fish"):
+                    result = subprocess.run(
+                        [fish, "--no-config", "-c",
+                         '"$argv[1]" --server-url "$argv[2]" sandbox new | read -x devbox; printenv devbox',
+                         binary, base],
+                        env=dict(os.environ, HOME=home), capture_output=True, text=True,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout, server.created["idempotency_key"] + "\n")
+                    self.assertEqual(result.stderr, "")
                 self.assertEqual(call("catalog")["defaults"], {"model_id": other_model, "inference_source": "magicmtn"})
                 self.assertEqual(next(directory.glob("defaults-*.json")).stat().st_mode & 0o777, 0o600)
                 call("defaults", "--model", replacement, success=False)
