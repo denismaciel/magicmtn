@@ -33,7 +33,7 @@ If you previously signed in to hosted MagicMtn, run `magic logout`. Start the lo
 magic server start
 ```
 
-The server creates `~/.config/magicmtn/local/magicmtn.sqlite3` automatically and listens on `127.0.0.1:47821`. Keep this terminal open. No database service or separate SQLite installation is required.
+The server creates `~/.config/magicmtn/local/magicmtn.sqlite3` automatically and listens on `127.0.0.1:1924`. Keep this terminal open. No database service or separate SQLite installation is required.
 
 Starting the server selects local mode for the CLI and Pi extension. Commands use the server address and credential saved in `~/.config/magicmtn/local/connection.json`. Local mode uses your machine and works without a hosted account.
 

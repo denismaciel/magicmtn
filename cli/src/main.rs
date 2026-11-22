@@ -100,10 +100,10 @@ impl Cli {
 #[test]
 fn cloud_is_default_and_server_selection_is_explicit() {
     assert_eq!(mode::default_server(), "https://api.magicmtn.ai");
-    let cli = Cli::try_parse_from(["magic", "--server-url", "http://127.0.0.1:47821"]).unwrap();
-    assert_eq!(cli.server_url().unwrap(), "http://127.0.0.1:47821");
+    let cli = Cli::try_parse_from(["magic", "--server-url", "http://127.0.0.1:1924"]).unwrap();
+    assert_eq!(cli.server_url().unwrap(), "http://127.0.0.1:1924");
     assert!(
-        Cli::try_parse_from(["magic", "--local", "--server-url", "http://127.0.0.1:47821"])
+        Cli::try_parse_from(["magic", "--local", "--server-url", "http://127.0.0.1:1924"])
             .is_err()
     );
 }
@@ -206,7 +206,7 @@ enum ServerCommands {
     Stop,
     /// Initialize local state and serve sandbox operations until interrupted
     Start {
-        #[arg(long, default_value = "127.0.0.1:47821")]
+        #[arg(long, default_value = "127.0.0.1:1924")]
         bind: std::net::SocketAddr,
         #[arg(long, default_value_t = 86400, value_parser = clap::value_parser!(u32).range(1..=86400))]
         ttl_seconds: u32,
@@ -1134,7 +1134,7 @@ fn local_server_accepts_explicit_network_names() {
         else {
             panic!("expected server start");
         };
-        assert_eq!(bind, "127.0.0.1:47821".parse().unwrap());
+        assert_eq!(bind, "127.0.0.1:1924".parse().unwrap());
         assert_eq!(network.as_deref(), Some(name));
     }
     for name in ["", "bad network", "a/b", ";echo", &"x".repeat(129)] {
