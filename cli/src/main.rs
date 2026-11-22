@@ -237,7 +237,7 @@ enum ProviderCommands {
 
 #[derive(Subcommand)]
 enum ComputerCommands {
-    /// Create a managed sandbox, or use an explicit provider image
+    /// Create a managed computer, or use an explicit provider image
     New {
         #[arg(long)]
         image: Option<String>,
@@ -254,7 +254,7 @@ enum ComputerCommands {
         #[arg(long)]
         notes: Option<String>,
     },
-    /// Execute a bounded command in a sandbox
+    /// Execute a bounded command in a computer
     Exec {
         id: String,
         #[arg(long, default_value_t = 30000, value_parser = clap::value_parser!(u64).range(1..=30000))]
@@ -264,21 +264,21 @@ enum ComputerCommands {
     },
     /// Open an interactive shell; exit returns to your terminal
     Ssh { id: String },
-    /// Copy a local file into the sandbox's default working directory
+    /// Copy a local file into the computer's default working directory
     Scp { id: String, file: PathBuf },
-    /// List active sandboxes, including those created by agent sessions
+    /// List active computers, including those created by agent sessions
     List {
-        /// Include all sandboxes regardless of status
+        /// Include all computers regardless of status
         #[arg(long)]
         all: bool,
     },
-    /// Show a sandbox by full UUID or unique prefix
+    /// Show a computer by full UUID or unique prefix
     Show {
         id: String,
         #[arg(long, value_enum, default_value = "human")]
         format: ShowFormat,
     },
-    /// Terminate a sandbox and end any attached sessions
+    /// Terminate a computer and end any attached sessions
     Terminate {
         id: String,
         /// Skip the confirmation prompt
