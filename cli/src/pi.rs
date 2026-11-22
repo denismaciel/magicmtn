@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use std::{
     fs,
     io::{IsTerminal, Read, Write},
+    mem::DropGuard,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -358,29 +359,6 @@ pub(crate) async fn managed_creation_body(
     }
     crate::configuration::creation_body(body)
 }
-struct Terminal;
-impl Terminal {
-    fn enter() -> Result<Self> {
-        crossterm::terminal::enable_raw_mode()?;
-        let guard = Self;
-        // A separate screen keeps the suspended local pi display intact.
-        crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
-        Ok(guard)
-    }
-}
-impl Drop for Terminal {
-    fn drop(&mut self) {
-        // Remote pi can still be running when we detach. Restore the keyboard,
-        // mouse and paste modes that its normal exit would have released.
-        let _ = std::io::stdout().write_all(b"\x1b[?2004l\x1b[<u\x1b[>4;0m\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?2031l\x1b[?2026l\x1b[0m");
-        let _ = crossterm::execute!(
-            std::io::stdout(),
-            crossterm::terminal::LeaveAlternateScreen,
-            crossterm::cursor::Show
-        );
-        let _ = crossterm::terminal::disable_raw_mode();
-    }
-}
 async fn attach(api: &Api, id: Uuid) -> Result<()> {
     terminal(
         api,
@@ -425,7 +403,20 @@ pub(crate) async fn terminal(api: &Api, path: &str, label: &str) -> Result<()> {
     let mut cursor = attached["cursor"]
         .as_u64()
         .context("terminal cursor missing")?;
-    let _terminal = Terminal::enter()?;
+    crossterm::terminal::enable_raw_mode()?;
+    let _terminal = DropGuard::new((), |()| {
+        // Remote pi can still be running when we detach. Restore the keyboard,
+        // mouse and paste modes that its normal exit would have released.
+        let _ = std::io::stdout().write_all(b"\x1b[?2004l\x1b[<u\x1b[>4;0m\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?2031l\x1b[?2026l\x1b[0m");
+        let _ = crossterm::execute!(
+            std::io::stdout(),
+            crossterm::terminal::LeaveAlternateScreen,
+            crossterm::cursor::Show
+        );
+        let _ = crossterm::terminal::disable_raw_mode();
+    });
+    // A separate screen keeps the suspended local pi display intact.
+    crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     // Native thread: a blocked stdin read must not keep the Tokio runtime alive
     // after detach. Bounded buffering also prevents unlimited pasted input.
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<Vec<u8>>(8);

@@ -76,7 +76,7 @@ jobs:
         with:
           name: cli-linux
           path: dist/bin
-      - run: rustup toolchain install 1.99.0 --profile minimal && rustup default 1.99.0
+      - run: rustup toolchain install
       - uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
         with:
           role-to-assume: ${{ vars.CLI_RELEASE_AWS_ROLE_ARN }}

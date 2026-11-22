@@ -1,5 +1,5 @@
 {
-  "checksum": "71ea3470807db41320d1867b3b7ad29112856af26dee16dcbd5b3c4cb90fd2ac",
+  "checksum": "818ba1cb537b340b0d2765c93d0564db457a166c8788241e9c1f7692c6d54b5e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6132,7 +6132,10 @@
         "edition": "2021"
       },
       "library_target_name": "magicmtn_assets",
-      "license_file": "../LICENSE",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
       "name": "magicmtn-assets",
       "repository": null,
       "targets": [
@@ -6233,7 +6236,10 @@
         ],
         "edition": "2021"
       },
-      "license_file": "../LICENSE",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
       "name": "magicmtn-cli",
       "repository": null,
       "targets": [],
@@ -6277,16 +6283,13 @@
             "target": "tokio"
           }
         ],
-        "edition": "2021",
-        "proc_macro_deps": [
-          {
-            "id": "async-trait 0.1.92",
-            "target": "async_trait"
-          }
-        ]
+        "edition": "2021"
       },
       "library_target_name": "magicmtn_contracts",
-      "license_file": "../../../LICENSE",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
       "name": "magicmtn-contracts",
       "repository": null,
       "targets": [
@@ -6380,7 +6383,10 @@
         "edition": "2021"
       },
       "library_target_name": "magicmtn_engine",
-      "license_file": "../LICENSE",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
       "name": "magicmtn-engine",
       "repository": null,
       "targets": [
@@ -6450,7 +6456,10 @@
         "edition": "2021"
       },
       "library_target_name": "magicmtn_local",
-      "license_file": "../LICENSE",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
       "name": "magicmtn-local",
       "repository": null,
       "targets": [
@@ -6510,7 +6519,10 @@
         "edition": "2021"
       },
       "library_target_name": "magicmtn_provider_framework",
-      "license_file": "LICENSE",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
       "name": "magicmtn-provider-framework",
       "repository": null,
       "targets": [
@@ -6542,7 +6554,10 @@
         "edition": "2021"
       },
       "library_target_name": "magicmtn_sdk",
-      "license_file": "LICENSE",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
       "name": "magicmtn-sdk",
       "repository": null,
       "targets": [
@@ -16724,7 +16739,6 @@
   },
   "direct_deps": [
     "anyhow 1.0.104",
-    "async-trait 0.1.92",
     "axum 0.7.9",
     "base64 0.22.1",
     "chrono 0.4.45",

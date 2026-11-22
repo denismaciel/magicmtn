@@ -8,7 +8,6 @@ description = "Frozen harness configuration and inventory contracts"
 
 [dependencies]
 anyhow = "1.0.86"
-async-trait = "0.1"
 chrono = { version = "0.4.38", features = ["serde"] }
 hex = "0.4.3"
 serde = { version = "1.0.200", features = ["derive"] }

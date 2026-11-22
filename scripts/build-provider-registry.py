@@ -50,7 +50,7 @@ def build_linux(name, arches):
         exports = '\n'.join(
             f'COPY --from=builder /build/provider/target/{arch}-unknown-linux-musl/release/magicmtn-provider-{name} /{name}-{arch}'
             for arch in arches)
-        (context / 'Containerfile').write_text(f'''FROM docker.io/library/rust:1.99.0-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6 AS builder
+        (context / 'Containerfile').write_text(f'''FROM docker.io/library/rust:1.100.0-bookworm@sha256:ade39a710ef85f3506cffcfec3e8a24ba090badef1dff2fb798f71d878833fea AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends python3-venv && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv /opt/cross && /opt/cross/bin/pip install --no-cache-dir cargo-zigbuild==0.23.4 ziglang==0.14.1
 ENV PATH=/opt/cross/bin:$PATH
@@ -74,23 +74,17 @@ FROM scratch
 
 
 def main():
-    aws = SOURCES / 'provider-aws'
-    subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=aws, check=True)
-    version = tomllib.loads((aws / 'Cargo.toml').read_text())['package']['version']
-    package('aws', version, 'macos', 'aarch64', aws / 'target/release/magicmtn-provider-aws', aws / 'LICENSE')
-    build_linux('aws', ['x86_64', 'aarch64'])
-    apple = SOURCES / 'provider-apple-container'
-    subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=apple, check=True)
-    version = tomllib.loads((apple / 'Cargo.toml').read_text())['package']['version']
-    package('apple-container', version, 'macos', 'aarch64', apple / 'target/release/magicmtn-provider-apple-container', apple / 'LICENSE')
-    mxc = SOURCES / 'provider-microsoft-mxc'
-    subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=mxc, check=True)
-    version = tomllib.loads((mxc / 'Cargo.toml').read_text())['package']['version']
-    package('microsoft-mxc', version, 'macos', 'aarch64', mxc / 'target/release/magicmtn-provider-microsoft-mxc', mxc / 'LICENSE')
-    ollama = SOURCES / 'provider-ollama'
-    subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=ollama, check=True)
-    version = tomllib.loads((ollama / 'Cargo.toml').read_text())['package']['version']
-    package('ollama', version, 'macos', 'aarch64', ollama / 'target/release/magicmtn-provider-ollama', ollama / 'LICENSE')
+    toolchain = tomllib.loads((ROOT / 'rust-toolchain.toml').read_text())['toolchain']['channel']
+    cargo_build = ['cargo', f'+{toolchain}', 'build', '--release', '--locked']
+    for name in ['aws', 'apple-container', 'microsoft-mxc', 'ollama']:
+        executable = f'magicmtn-provider-{name}'
+        provider = SOURCES / f'provider-{name}'
+        subprocess.run(cargo_build, cwd=provider, check=True)
+        version = tomllib.loads((provider / 'Cargo.toml').read_text())['package']['version']
+        package(name, version, 'macos', 'aarch64', provider / 'target/release' / executable,
+                provider / 'LICENSE')
+        if name == 'aws':
+            build_linux(name, ['x86_64', 'aarch64'])
     build_linux('firecracker', ['x86_64', 'aarch64'])
     build_linux('nvx', ['x86_64'])
     print(OUT)

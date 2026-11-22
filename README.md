@@ -17,7 +17,7 @@ Distributed inference and sandboxed compute platform for agents. The open-source
 
 ## Install from source
 
-Use Rust 1.99.0 or a later stable release. From the repository root, install the CLI and check its version.
+Use Rust 1.100.0 or a later stable release. From the repository root, install the CLI and check its version.
 
 ```sh
 cargo install --path cli --locked --bin magic

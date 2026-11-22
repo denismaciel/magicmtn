@@ -31,7 +31,7 @@ async fn post(
         .json()
         .await?)
 }
-pub(crate) async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args) -> Result<!> {
     let url = reqwest::Url::parse(&args.server_url)?;
     ensure!(
         url.scheme() == "https"

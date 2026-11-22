@@ -621,8 +621,7 @@ fn table_cell(value: &str, width: usize) -> String {
     cell
 }
 fn sandbox_image(record: &Value) -> &str {
-    let image = text(record, "template");
-    image.strip_prefix("image:").unwrap_or(image)
+    text(record, "template").trim_prefix("image:")
 }
 fn print_list(items: &[Value]) {
     println!(

@@ -4,13 +4,15 @@ Start with the [local quickstart](docs/local-server.md) for a user workflow and 
 
 ## Build and test
 
-Install Rust 1.99.0 and Bazelisk. Run these checks from the repository root.
+Install Rust 1.100.0 and Bazelisk. Run these checks from the repository root.
 
 ```sh
 cargo check --workspace --all-targets --locked
 cargo test --workspace --locked
 bazel test //...
 ```
+
+Cargo uses a three-day cooldown when selecting newly published dependency versions.
 
 For changes to the Pi extension, use Node.js 24 and run `npm ci --prefix interfaces/pi --ignore-scripts` followed by `npm --prefix interfaces/pi test`. For runtime changes, install `runtime/requirements.txt` into a Python 3.13 virtual environment and run `python -m unittest discover -s runtime/tests`. The [runtime CI workflow](.github/workflows/sandbox-runtime.yml) shows how to exercise the real Pi and OpenCode binaries.
 

@@ -1891,7 +1891,6 @@ name = "magicmtn-contracts"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "hex",
  "serde",
