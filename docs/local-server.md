@@ -16,6 +16,15 @@ Install the Apple Container provider and MagicMtn Canonical image:
 magic provider install apple-container
 ```
 
+If the registry download fails, install the same Apple silicon package from its versioned archive. Verify the archive before installing it.
+
+```sh
+archive="$(mktemp -d)/apple-container.tar.gz"
+curl -fsSL -o "$archive" https://magicmtn-provider-registry-993499103295.s3.us-east-2.amazonaws.com/providers/apple-container/0.1.2/macos-aarch64.tar.gz
+printf '%s  %s\n' 0e112470665f9d38656a800ea264596cf5f9d51ba40eca92bb94c6b5ed412e50 "$archive" | shasum -a 256 -c - &&
+  magic provider install --file "$archive"
+```
+
 ## Start the server
 
 If you previously signed in to hosted MagicMtn, run `magic logout`. Start the local server in its own terminal.
