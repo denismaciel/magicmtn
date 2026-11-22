@@ -26,7 +26,9 @@ class LinuxPackageTests(unittest.TestCase):
                     if command[1] == 'build':
                         context = Path(command[-1])
                         containerfile = (context / 'Containerfile').read_text()
-                        self.assertTrue((context / 'provider/src/runtime.py').is_file())
+                        runtime = ['aws_bridge.py', 'nitro_eks.py'] if name == 'aws' else ['runtime.py']
+                        for filename in runtime:
+                            self.assertTrue((context / 'provider/src' / filename).is_file())
                         self.assertTrue((context / 'sdk/magicmtn-sdk/Cargo.toml').is_file())
                         self.assertEqual(containerfile.count('COPY --from=builder'), len(arches))
                         for arch in arches:

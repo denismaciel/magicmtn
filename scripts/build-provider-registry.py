@@ -74,6 +74,11 @@ FROM scratch
 
 
 def main():
+    aws = SOURCES / 'provider-aws'
+    subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=aws, check=True)
+    version = tomllib.loads((aws / 'Cargo.toml').read_text())['package']['version']
+    package('aws', version, 'macos', 'aarch64', aws / 'target/release/magicmtn-provider-aws', aws / 'LICENSE')
+    build_linux('aws', ['x86_64', 'aarch64'])
     apple = SOURCES / 'provider-apple-container'
     subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=apple, check=True)
     version = tomllib.loads((apple / 'Cargo.toml').read_text())['package']['version']

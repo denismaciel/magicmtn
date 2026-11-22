@@ -9,6 +9,15 @@
       ]
     },
     {
+      "name": "aws",
+      "description": "Run chat inference with Amazon Bedrock and SageMaker, and run sandboxes on AWS Lambda MicroVMs or Nitro-enabled EKS.",
+      "platforms": [
+        "macos-aarch64",
+        "linux-x86_64",
+        "linux-aarch64"
+      ]
+    },
+    {
       "name": "firecracker",
       "description": "Run local Linux microVM sandboxes with Firecracker.",
       "platforms": [
