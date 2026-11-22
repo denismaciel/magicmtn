@@ -140,14 +140,9 @@ mod tests {
     #[test]
     fn only_registry_members_are_public() {
         assert!(contains("apple-container"));
+        assert!(contains("aws"));
         assert!(contains("firecracker"));
-        for name in [
-            "modal",
-            "fireworks",
-            "aws",
-            "e2b",
-            "future-private-provider",
-        ] {
+        for name in ["modal", "fireworks", "e2b", "future-private-provider"] {
             assert!(!contains(name));
         }
         assert!(crate::library::catalog()["inference_providers"]
