@@ -42,3 +42,8 @@ The publisher validates the archives and source hashes before uploading. It writ
 `magic sandbox new --image REFERENCE` passes the user's selection to the provider. Explicit selections bypass Canonical setup. Apple Container owns registry authentication, downloads, and storage for custom OCI images.
 
 Firecracker owns prepared VM root filesystems and its image mapping through `MAGICMTN_FIRECRACKER_IMAGES`; map the Canonical reference to a prepared VM image to select it on that provider. `magic images list` shows the local provider's inventory.
+
+
+## Review bundled software
+
+Record the licenses and notices for the tools in the image before distribution. The image includes the MagicMtn license at `/usr/share/licenses/magicmtn/LICENSE`. Review the terms for preinstalled third-party agents and keep their authentication flows intact. [Claude Code preinstallation terms](https://code.claude.com/docs/en/legal-and-compliance#can-customers-offer-claude-code-in-their-products)

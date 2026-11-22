@@ -19,7 +19,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             _local_sandbox: false,
-            error_reporting: true,
+            error_reporting: false,
         }
     }
 }
@@ -57,13 +57,14 @@ fn creation_body_at(root: &Path, mut body: Value) -> Result<Value> {
 mod tests {
     use super::*;
     #[test]
-    fn error_reporting_defaults_on_and_accepts_only_boolean_opt_out() {
+    fn error_reporting_requires_explicit_boolean_opt_in() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("config");
-        assert!(read(&path).unwrap().error_reporting);
+        assert!(!read(&path).unwrap().error_reporting);
         for (text, expected) in [
-            ("", true),
+            ("", false),
             ("error-reporting = true", true),
+            ("local-sandbox = true", false),
             ("error-reporting = false", false),
             ("local-sandbox = true\nerror-reporting = false", false),
         ] {

@@ -657,7 +657,7 @@ async fn main() -> Result<()> {
     let sentry = operation.map(|_| telemetry::init());
     let result = run(cli).await;
     if let (Some(operation), Err(error)) = (operation, &result) {
-        telemetry::report("magic-cli", operation, error, &server_url).await;
+        telemetry::report("magic-cli", operation, error);
     }
     drop(sentry);
     result

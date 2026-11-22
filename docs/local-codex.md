@@ -4,7 +4,7 @@ Run Codex with your ChatGPT subscription inside a MagicMtn sandbox on your Mac. 
 
 ## Start MagicMtn
 
-Install the [MagicMtn CLI](../README.md#install) and [Apple Container](https://github.com/apple/container), then run:
+Use an Apple Container provider release that advertises the `ssh` operation. Install the [MagicMtn CLI](../README.md#install-from-source) and [Apple Container](https://github.com/apple/container), then run:
 
 ```sh
 container system start

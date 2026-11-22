@@ -5,65 +5,35 @@
   </picture>
 </p>
 
-<p align="center"><strong>MagicMtn - Secure inference and compute for coding agents</strong></p>
+# MagicMtn
 
-## Install
+Run coding agents in isolated workspaces with MagicMtn's CLI, sandbox engine, and provider SDK.
 
-Install the command-line interface:
+## Install from source
 
-```sh
-curl -fsSL https://magicmtn.ai/install.sh | sh
-```
-
-Or via Homebrew on Apple Silicon:
+Use Rust 1.99.0 or a later stable release. From the repository root, install the CLI and check its version.
 
 ```sh
-brew install UseMagicMtn/tap/magic
+cargo install --path cli --locked --bin magic
+magic --version
 ```
 
-The installer verifies the release and installs `magic` in `~/.local/bin`. It prompts to configure your shell's PATH and completions. Restart your shell after configuration, then sign in:
+Cargo installs the executable into `~/.cargo/bin` by default. Add that directory to your PATH if your shell cannot find `magic`.
 
-```sh
-magic login
-```
+## Run a local sandbox
 
-To use MagicMtn with Pi, install the integration, then run `/reload` in Pi:
+On Apple silicon, use Apple Container and the built-in SQLite server to create, execute a command in, and terminate a sandbox. Follow the [local quickstart](docs/local-server.md).
 
-```sh
-magic agents install pi
-```
+The local server also exposes sandbox tools to Pi and OpenCode. With the local server running, use `magic agents install pi` or `magic agents install opencode`. Start your agent and use `/magic new` and `/magic view` to work with sandboxes.
 
-In Pi, `/magic new` starts a workspace using your saved defaults. Use
-`/magic view` to reconnect to an existing sandbox.
+## Connect to hosted MagicMtn
 
-## Use OpenCode
+Use `magic login` to connect your CLI to a hosted account. Then install the integration for your agent with `magic agents install pi` or `magic agents install opencode`. For OpenCode, use version 2.3.2 or later. Hosted and local modes have separate credentials.
 
-After `magic login`, install the integration with `magic agents install opencode` and start OpenCode 2.3.2 or later. Run `/magic new` to start a managed OpenCode workspace, and use Ctrl+] to detach while it keeps running. Run `/magic view` to reconnect, stop or restart the agent, or terminate the workspace.
+CLI [error reporting](docs/error-reporting.md) is opt-in.
 
-Use `/magic default` to select a workspace model and `/magic inference` to select a MagicMtn model for your current OpenCode session. Bring a connected API-key provider to a managed workspace with `/magic connected`. The `magic opencode connect` command accepts a model definition and API key over stdin and stores the key in the MagicMtn gateway.
+## Contribute
 
-With the local MagicMtn server selected, `magic agents install opencode` adds the sandbox tools and the sandbox menu to OpenCode. OpenCode uses your current provider and retains its local shell and file tools.
+See [CONTRIBUTING.md](CONTRIBUTING.md) to build and test the engine and SDK. Send vulnerability reports through the private channel in [SECURITY.md](SECURITY.md).
 
-## Run locally
-
-Run a single-user server and Apple Container sandboxes using your own machine and bundled SQLite. Follow [Run MagicMtn locally](docs/local-server.md) to install the provider, start the server, and execute commands in a sandbox.
-
-Use your ChatGPT subscription with [Codex in a local sandbox](docs/local-codex.md), with shell access and MCP tools.
-
-## Development
-
-Run the engine and SDK tests with [Bazelisk](https://github.com/bazelbuild/bazelisk#installation):
-
-```sh
-bazel test //...
-```
-
-See [the Bazel guide](docs/bazel.md) for reusable targets and cross-repository builds.
-For Cargo development:
-
-```sh
-cargo check --workspace --all-targets --locked
-cargo test --workspace --lib --locked
-```
-
-The Rust workspace contains the shared engine, provider SDK, CLI, local server, and sandbox runtime. MagicMtn Cloud consumes the same engine and sandbox API.
+MagicMtn is licensed under the [Apache License 2.0](LICENSE). Third-party components retain their own licenses.

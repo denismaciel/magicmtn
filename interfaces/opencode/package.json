@@ -1,6 +1,7 @@
 {
   "name": "magicmtn-opencode",
   "type": "module",
+  "license": "Apache-2.0",
   "exports": {
     ".": "./index.js",
     "./tui": "./tui.js"

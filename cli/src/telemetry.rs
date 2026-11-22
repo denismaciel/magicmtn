@@ -1,8 +1,5 @@
-use crate::{authentication::Credentials, Api};
 use anyhow::Error;
-use reqwest::Method;
 use sentry::{ClientInitGuard, ClientOptions, Level};
-use std::time::Duration;
 
 // A Sentry DSN is a public ingestion address. The CLI cannot rely on a server
 // environment variable because it runs on users' machines.
@@ -18,13 +15,12 @@ pub(crate) fn init() -> ClientInitGuard {
     ))
 }
 
-pub(crate) async fn report(client: &str, operation: &str, error: &Error, server_url: &str) {
+pub(crate) fn report(client: &str, operation: &str, error: &Error) {
     if !crate::configuration::error_reporting().unwrap_or(false) {
         return;
     }
     let message = error.to_string().to_ascii_lowercase();
-    // Remote exits are queued by the authenticated server relay. Avoid an
-    // identity lookup and duplicate delivery while returning to local Pi.
+    // Remote exits are queued by the authenticated server relay.
     if message.starts_with("terminal disconnected: status ")
         || message.starts_with("remote terminal exited with status ")
         || operation == "report"
@@ -53,20 +49,6 @@ pub(crate) async fn report(client: &str, operation: &str, error: &Error, server_
     } else {
         "operation"
     };
-    let identity = tokio::time::timeout(Duration::from_secs(2), async {
-        let mut api = Api::new(server_url).ok()?;
-        api.token = Some(Credentials::new().ok()?.load(&api.base).ok()??);
-        let user = api.request(Method::GET, "auth/me", None).await.ok()?;
-        let organization = api
-            .request(Method::GET, "auth/organizations", None)
-            .await
-            .ok()
-            .and_then(|organizations| organizations.as_array()?.first().cloned());
-        Some((user, organization))
-    })
-    .await
-    .ok()
-    .flatten();
     sentry::with_scope(
         |scope| {
             scope.set_tag("client", client);
@@ -74,16 +56,6 @@ pub(crate) async fn report(client: &str, operation: &str, error: &Error, server_
             scope.set_tag("failure_category", category);
             if let Some(status) = status {
                 scope.set_tag("http_status", status);
-            }
-            if let Some((user, organization)) = identity {
-                scope.set_user(Some(sentry::User {
-                    id: user["user_id"].as_str().map(str::to_owned),
-                    email: user["email"].as_str().map(str::to_owned),
-                    ..Default::default()
-                }));
-                if let Some(id) = organization.as_ref().and_then(|value| value["id"].as_str()) {
-                    scope.set_tag("organization_id", id);
-                }
             }
         },
         || {

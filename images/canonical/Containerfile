@@ -48,6 +48,7 @@ RUN apk upgrade --no-cache \
     && ln -s /computer /workspace \
     && python3 -m venv /opt/venv \
     && chown -R sandbox:sandbox /computer /opt/venv
+COPY LICENSE /usr/share/licenses/magicmtn/LICENSE
 COPY runtime /opt/magicmtn/runtime
 COPY --from=pi /opt/pi /opt/pi
 COPY --from=pi /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm

@@ -40,7 +40,9 @@ def main():
     sources = {str(Path(path).relative_to("runtime")): checksum for path, checksum in runtime_sources(root).items()}
     verify = "import hashlib,json,pathlib;root=pathlib.Path('/opt/magicmtn/runtime');"
     verify += f"expected={sources!r};"
-    verify += "assert all(hashlib.sha256((root/path).read_bytes()).hexdigest()==checksum for path,checksum in expected.items()), 'image runtime sources differ'"
+    verify += "assert all(hashlib.sha256((root/path).read_bytes()).hexdigest()==checksum for path,checksum in expected.items()), 'image runtime sources differ';"
+    license_sha256 = hashlib.sha256((root / "LICENSE").read_bytes()).hexdigest()
+    verify += f"assert hashlib.sha256(pathlib.Path('/usr/share/licenses/magicmtn/LICENSE').read_bytes()).hexdigest()=={license_sha256!r}"
     run("podman", "run", *platform_options, "--rm", "--network", "none", args.tag, "python3", "-c", verify)
     dependencies = json.loads((context / "package.json").read_text())["dependencies"]
     expected_pi = dependencies["@earendil-works/pi-coding-agent"]

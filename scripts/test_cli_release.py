@@ -96,6 +96,8 @@ class ReleaseTest(unittest.TestCase):
                 mock.patch.object(publisher, "subprocess", process):
             publisher.main()
         destinations = [call.args[0][4] for call in process.run.call_args_list]
+        self.assertTrue(any(url.endswith("/LICENSE") for url in destinations[:-2]))
+        self.assertEqual((output / "LICENSE").read_bytes(), (publisher.ROOT / "LICENSE").read_bytes())
         self.assertTrue(destinations[-2].endswith("/latest.json"))
         self.assertTrue(destinations[-1].endswith("/install.sh"))
         manifest = json.loads((output / "release.json").read_text())

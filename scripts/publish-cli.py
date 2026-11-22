@@ -28,6 +28,7 @@ def prepare(artifacts, output, channel):
     manifest = {"release": identifier, "platforms": hashes, "source_commit": source, "source_dirty": dirty}
     output.mkdir(parents=True, exist_ok=True)
     (output / "release.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    shutil.copyfile(ROOT / "LICENSE", output / "LICENSE")
     for platform, digest in hashes.items():
         (output / ("magic-" + platform + ".sha256")).write_text(digest + "  magic\n")
     (output / "SHA256SUMS").write_text("".join(digest + "  magic-" + platform + "\n" for platform, digest in hashes.items()))
@@ -70,6 +71,7 @@ def main():
         upload(args.output / (name + ".sha256"), prefix + name + ".sha256", "text/plain", immutable)
     upload(args.output / "SHA256SUMS", prefix + "SHA256SUMS", "text/plain", immutable)
     upload(args.output / "release.json", prefix + "release.json", "application/json", immutable)
+    upload(args.output / "LICENSE", prefix + "LICENSE", "text/plain; charset=utf-8", immutable)
     # Promote only after every immutable artifact has uploaded successfully.
     upload(args.output / "release.json", "latest.json", "application/json", "no-cache")
     upload(args.output / "install.sh", "install.sh", "text/plain; charset=utf-8", "no-cache")

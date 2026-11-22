@@ -1,6 +1,6 @@
 # CLI distribution
 
-The Publish CLI binaries workflow uploads versioned binaries and checksums to S3. Its final upload replaces `install.sh`, which is served through `https://magicmtn.ai/install.sh`. The installer names a complete release and verifies the platform's checksum before installing.
+The Publish CLI binaries workflow uploads versioned binaries, checksums, and the Apache 2.0 license to S3. Its final upload replaces `install.sh`, which is served through `https://magicmtn.ai/install.sh`. The installer names a complete release and verifies the platform's checksum before installing.
 
 An S3 Object Created event for `install.sh` starts the `magicmtn-cli-homebrew` CodeBuild project. The build reads the release named in the installer, checks that the manifest and installer agree on the Apple Silicon checksum, and updates `Formula/magic.rb` in [UseMagicMtn/homebrew-tap](https://github.com/UseMagicMtn/homebrew-tap) through GitHub's signing API. It checks the resulting commit signature. The formula fetches the same immutable binary as the shell installer. Repeated events for the current release leave the formula untouched.
 
@@ -22,3 +22,10 @@ Start the project to sync the current release after setup or to replay a missed 
 ```sh
 aws codebuild start-build --region us-east-2 --project-name magicmtn-cli-homebrew
 ```
+
+
+## Verify an authenticated release
+
+Before promoting the signed installer, configure the release public key and Apple team ID in `release/cli-trust.json`. Build from the exact source commit and verify the Developer ID signature and Apple notarization. Publish the signed manifest and deploy the matching bootstrap installer together. Test anonymous installation on Apple silicon and both Linux architectures before linking to it from the README. Test Homebrew without GitHub credentials before advertising that install path.
+
+Include the project license and applicable third-party notices with distributed artifacts. For source builds, follow [the README](../README.md#install-from-source).

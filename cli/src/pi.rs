@@ -278,9 +278,7 @@ pub async fn run(api: &Api, command: Commands) -> Result<()> {
                 "pi-extension",
                 &operation,
                 &anyhow::anyhow!("Pi extension operation failed"),
-                api.base.as_str(),
-            )
-            .await;
+            );
             json!({"reported":true})
         }
     };
