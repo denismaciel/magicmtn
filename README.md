@@ -1,11 +1,11 @@
+<h1 align="center">MagicMtn—Distributed compute for agents</h1>
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
     <img src=".github/assets/logo-light.svg" alt="MagicMtn logo" width="180" height="180">
   </picture>
 </p>
-
-# MagicMtn
 
 Distributed inference and sandboxed compute platform for agents. The open-source edition of MagicMtn Cloud that runs on your own infrastructure.
 
